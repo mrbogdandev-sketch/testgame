@@ -1,0 +1,2599 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Doors-like</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#050507;}
+  canvas{display:block;}
+  #hud{position:fixed;left:14px;top:12px;color:#9a9da3;font:13px/1.6 ui-monospace,Consolas,monospace;pointer-events:none;user-select:none;line-height:1.7;}
+  #hud b{color:#e2e2df;font-weight:600;}
+  #hTimer{display:none;font-size:18px;color:#c5c5c0;}
+  #clock,#floorBadge,#coins{position:fixed;right:18px;color:#d0d0ca;font:16px ui-monospace,monospace;background:#111214;padding:6px 14px;border-radius:3px;border:1px solid #3a3b3e;pointer-events:none;user-select:none;letter-spacing:1px;}
+  #clock{top:18px;}
+  #floorBadge{top:56px;color:#d6c89f;font-weight:bold;}
+  #coins{top:98px;color:#d6c89f;font-weight:bold;display:flex;align-items:center;gap:8px;}
+  #coinIcon{width:24px;height:24px;object-fit:contain;}
+  #burnHud,#chaseHud{position:fixed;top:70px;left:50%;transform:translateX(-50%);color:#c9b08d;font:bold 20px ui-monospace,monospace;pointer-events:none;user-select:none;display:none;letter-spacing:1px;}
+  #note{position:fixed;right:18px;top:150px;color:#e8e4d8;background:#171717;border:1px solid #77705e;border-radius:3px;padding:14px 20px;font:16px/1.5 ui-monospace,monospace;pointer-events:none;user-select:none;display:none;min-width:180px;}
+  #note .title{color:#d6c89f;font-weight:700;letter-spacing:1px;margin-bottom:8px;}
+  #note .row{color:#d0d0ca;}
+  #note .row span{color:#b9c5ad;font-weight:700;margin-left:6px;}
+  #staminaWrap{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);width:280px;height:12px;background:#111214;border:1px solid #505154;border-radius:2px;overflow:hidden;pointer-events:none;user-select:none;}
+  #staminaBar{height:100%;width:100%;background:#9aa896;}
+  #ticketInfo{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);color:#d6c89f;font:bold 16px ui-monospace,monospace;background:#171717;padding:10px 22px;border-radius:3px;border:1px solid #77705e;pointer-events:none;user-select:none;display:none;}
+  #pcOverlay{position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:100;display:none;align-items:center;justify-content:center;font-family:ui-monospace,Consolas,monospace;}
+  #pcWindow{background:#c0c0c0;border:2px outset #fff;border-radius:0;padding:4px;min-width:680px;max-width:860px;color:#111;box-shadow:none;}
+  #pcTitle{font-size:22px;font-weight:bold;color:#fff;background:#000080;padding:6px 8px;margin:0 0 18px;letter-spacing:0;}
+  #pcBody{min-height:220px;padding:18px;background:#fff;border:2px inset #fff;border-radius:0;font-size:15px;line-height:1.7;}
+  #pcFooter{margin-top:18px;display:flex;justify-content:space-between;align-items:center;font-size:14px;color:#111;}
+  #pcClose{background:#c0c0c0;color:#111;border:2px outset #fff;padding:8px 22px;cursor:pointer;font-family:inherit;font-size:14px;border-radius:0;}
+  .buyBtn{background:#c0c0c0;color:#111;border:2px outset #fff;padding:8px 22px;cursor:pointer;font-family:inherit;font-size:15px;border-radius:0;}
+  .buyBtn:disabled{background:#c0c0c0;color:#777;border-color:#999;cursor:not-allowed;}
+  .ok{color:#b9c5ad;}
+  .no{color:#c58d8d;}
+  #mobileControls{display:none;position:fixed;inset:0;z-index:20;pointer-events:none;touch-action:none;user-select:none;}
+  #joystick{position:absolute;left:24px;bottom:28px;width:132px;height:132px;border:2px solid rgba(220,220,220,0.55);border-radius:50%;background:rgba(20,20,22,0.58);pointer-events:auto;touch-action:none;}
+  #joystick::after{content:'';position:absolute;left:50%;top:50%;width:2px;height:70%;background:rgba(220,220,220,0.12);transform:translate(-50%,-50%);}
+  #joystickKnob{position:absolute;left:50%;top:50%;width:58px;height:58px;border:2px solid rgba(245,245,245,0.8);border-radius:50%;background:rgba(110,110,115,0.78);transform:translate(-50%,-50%);pointer-events:none;}
+  #actionButton{position:absolute;right:30px;bottom:48px;width:92px;height:92px;border:2px solid rgba(230,230,230,0.75);border-radius:50%;background:rgba(35,35,38,0.82);color:#f0f0ec;font:bold 12px ui-monospace,monospace;letter-spacing:0.5px;pointer-events:auto;touch-action:none;}
+  #actionButton:active{background:rgba(90,90,94,0.9);}
+  @media (pointer:coarse), (max-width:700px){
+    #mobileControls{display:block;}
+    #hud{font-size:11px;max-width:240px;}
+    #pcWindow{min-width:0;width:calc(100vw - 32px);max-width:none;padding:12px;}
+    #pcTitle{font-size:18px;}
+    #pcBody{min-height:160px;}
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <b>WASD / ←↑→↓</b> — движение &nbsp;·&nbsp; <b>Shift</b> — бег<br>
+  <b>Клик рядом</b> — взять / положить / ударить / рычаг / ПК<br>
+  Комната: <b id="hRoom">1</b> &nbsp;·&nbsp; в памяти: <b id="hAlive">0</b> &nbsp;·&nbsp; <b id="hTimer">90</b>
+</div>
+<div id="clock">00:00</div>
+<div id="floorBadge">ЭТАЖ 1</div>
+<div id="coins"><img src="images/money.png" id="coinIcon" alt=""><span id="coinCount">0</span></div>
+<div id="burnHud">КОНДИЦИОНЕР! ПЕРЕКЛЮЧИ РЫЧАГ</div>
+<div id="chaseHud">БЕГИ! ВПЕРЁД!</div>
+<div id="ticketInfo">ПОДОЙДИ К ПК</div>
+<div id="note"><div class="title">ЗАПИСКА — ПОРЯДОК КАРТИН</div><div id="noteBody"></div></div>
+<div id="staminaWrap"><div id="staminaBar"></div></div>
+<div id="mobileControls" aria-label="Мобильное управление">
+  <div id="joystick" aria-label="Джойстик движения"><div id="joystickKnob"></div></div>
+  <button id="actionButton" type="button" aria-label="Взаимодействовать">ДЕЙСТВИЕ</button>
+</div>
+<div id="pcOverlay">
+  <div id="pcWindow">
+    <div id="pcTitle">ТЕРМИНАЛ</div>
+    <div id="pcBody"></div>
+    <div id="pcFooter">
+      <div>Баланс: <span id="pcCoins" class="ok">0</span> ★</div>
+      <button id="pcClose">ЗАКРЫТЬ (ESC)</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ══════════════ ЗВУКИ ══════════════ */
+const sounds = {
+  step: new Audio('sounds/step.mp3'),
+  udar: new Audio('sounds/udar.mp3'),
+  udarazlom: new Audio('sounds/udarazlom.mp3'),
+  bg: new Audio('sounds/bg.mp3'),
+  kond: new Audio('sounds/kond.mp3'),
+  podbor: new Audio('sounds/podbor.mp3'),
+  moneta: new Audio('sounds/moneta.mp3'),
+  door: new Audio('sounds/door.mp3'),
+  kvest1: new Audio('sounds/kvest1.mp3'),
+  kvest2: new Audio('sounds/kvest2.mp3')
+};
+sounds.bg.loop = true; sounds.bg.volume = 0.20;
+sounds.kond.loop = true; sounds.kond.volume = 0;
+sounds.kvest1.loop = true; sounds.kvest1.volume = 0;
+sounds.kvest2.loop = true; sounds.kvest2.volume = 0;
+sounds.step.volume = 0.45;
+sounds.udar.volume = 0.65;
+sounds.udarazlom.volume = 0.8;
+sounds.podbor.volume = 0.55;
+sounds.moneta.volume = 0.6;
+sounds.door.volume = 0.75;
+
+let audioUnlocked = false;
+function playSound(s, vol){
+  if (!audioUnlocked) return;
+  try { s.currentTime = 0; if (vol !== undefined) s.volume = vol; s.play().catch(()=>{}); } catch(e){}
+}
+function unlockAudio(){
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  sounds.bg.play().catch(()=>{});
+  sounds.kond.play().catch(()=>{});
+  sounds.kvest1.play().catch(()=>{});
+  sounds.kvest2.play().catch(()=>{});
+}
+window.addEventListener('click', unlockAudio, { once: true });
+window.addEventListener('keydown', unlockAudio, { once: true });
+function ensureBgMusic(){
+  if (!audioUnlocked) return;
+  if (sounds.bg.paused && sounds.bg.volume > 0.01) sounds.bg.play().catch(()=>{});
+  if (sounds.kvest1.paused && sounds.kvest1.volume > 0.01) sounds.kvest1.play().catch(()=>{});
+  if (sounds.kvest2.paused && sounds.kvest2.volume > 0.01) sounds.kvest2.play().catch(()=>{});
+}
+
+/* ══════════════ КАРТИНКИ ══════════════ */
+const loadedImages = [];
+function tryLoadImage(path){
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = path;
+  });
+}
+async function loadImagesFromFolder(){
+  const exts = ['png','jpg','jpeg','webp'];
+  for (let i = 1; i <= 40; i++){
+    for (const ext of exts){
+      const img = await tryLoadImage(`images/${i}.${ext}`);
+      if (img){ loadedImages.push({ path: `images/${i}.${ext}`, img }); break; }
+    }
+  }
+}
+loadImagesFromFolder();
+
+const textures = { lever:null, mainchar:null, money:null, musor:null, musor1:null, pc:null, box:null };
+async function loadTextures(){
+  const map = [
+    ['lever',    'images/lever.png'],
+    ['mainchar', 'images/mainchar.png'],
+    ['money',    'images/money.png'],
+    ['musor',    'images/musor.png'],
+    ['musor1',   'images/musor-1.png'],
+    ['pc',       'images/pc.png'],
+    ['box',      'images/box.png']
+  ];
+  for (const [key, path] of map) textures[key] = await tryLoadImage(path);
+}
+loadTextures();
+
+function getImageFor(idx){
+  if (loadedImages.length === 0) return null;
+  return loadedImages[idx % loadedImages.length].img;
+}
+function drawSpriteFit(img, cx, cy, size){
+  if (!img) return;
+  const nw = img.naturalWidth || img.width;
+  const nh = img.naturalHeight || img.height;
+  if (nw === 0 || nh === 0) return;
+  const scale = size / Math.max(nw, nh);
+  const w = nw * scale, h = nh * scale;
+  ctx.drawImage(img, cx - w/2, cy - h/2, w, h);
+}
+
+/* ══════════════ НАСТРОЙКИ ══════════════ */
+const WALL = 26, DEPTH = 200, GAP = 120, HALF_GAP = GAP/2;
+const PLAYER_R = 20;
+const SPEED = 260;
+const SPRINT_MULT = 3.5;
+const PICKUP_D = 150, REACH_D = 240;
+const ALCOVE = 120, ALCOVE_T = 22, HOLE_CHANCE = 0.40;
+const PUZZLE_W = 2200, PUZZLE_H = 2200, PUZZLE_SLOTS = 6, PUZZLE_TIME = 60;
+const PUZZLE_SLOT_SIZE = 90;
+const ORDER_W = 1900, ORDER_H = 1700, ORDER_SLOTS = 5;
+const ORDER_SLOT_SIZE = 90;
+const TICKET_W = 1400, TICKET_H = 1100, TICKET_COST = 30, TICKET_INTERVAL = 30;
+const PC_INTERACT_D = 160;
+
+/* ── Счётчики для спавна комнат ── */
+let nextPCRoomNumber = 30;       /* 1-based номер комнаты, где будет ПК */
+let roomsSinceQuest = 0;         /* сколько комнат прошло с последнего квеста */
+const MIN_QUEST_GAP = 12;        /* минимум комнат между квестами */
+const QUEST_CHANCE = 0.30;       /* шанс квеста, если гэп выполнен */
+
+const MONSTER_R = 32, MONSTER_WARN_TIME = 10, MONSTER_SEARCH_TIME = 10;
+const MONSTER_SPEED = 155, MONSTER_COOLDOWN_ROOMS = 3, MONSTER_CHANCE = 0.55;
+const CHASER_R = 40, CHASER_PATROL_SPEED = 130, CHASER_CHASE_SPEED = 290;
+const CHASER_FOV = Math.PI * 0.42;
+
+const HOUR_REAL_SECONDS = 30;
+const BURN_TIMES = [6.25, 22.0];
+const BURN_DURATION = 30, LEVER_INTERACT_D = 90;
+let gameTimeHours = 0.0;
+let lastBurnSlot = -1;
+const burnEvent = { active:false, timer:0, vignette:0, lever:null };
+const BOX_HIT_D = 90, BOX_SHAKE_HIT = 7, BOX_SHAKE_BREAK = 14, BOX_HIT_COOLDOWN = 0.28;
+let coinCount = 0, shakeIntensity = 0;
+const SHAKE_DECAY = 42;
+let currentFloor = 1;
+function floorMult(){ return 1 + (currentFloor - 1) * 0.35; }
+const ROOM_REMOVE_MARGIN = 1000;
+
+const CORRIDOR_WIDTH = 620, CORRIDOR_HEIGHT = 2000, CORRIDOR_DOOR_W = 140;
+const CORRIDOR_COUNT = 3, CORRIDOR_CHASER_SPEED = 310, CORRIDOR_CHASER_START_OFFSET = 480;
+
+function boxReduction(){ return Math.max(0.35, 1 - (currentFloor - 1) * 0.20); }
+
+/* ══════════════ CANVAS ══════════════ */
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let VW = 0, VH = 0, DPR = 1;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  VW = window.innerWidth; VH = window.innerHeight;
+  canvas.width = Math.floor(VW*DPR); canvas.height = Math.floor(VH*DPR);
+  canvas.style.width = VW+'px'; canvas.style.height = VH+'px';
+}
+resize(); window.addEventListener('resize', resize);
+
+/* ══════════════ УТИЛИТЫ ══════════════ */
+const rnd = (a,b) => a + Math.random()*(b-a);
+const rndInt = (a,b) => Math.floor(rnd(a,b+1));
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+function distanceToRect(px,py,rx,ry,rw,rh){
+  const cx = clamp(px,rx,rx+rw), cy = clamp(py,ry,ry+rh);
+  return Math.hypot(px-cx, py-cy);
+}
+function shuffle(arr){ const a = arr.slice(); for (let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; }
+function addShake(amount){ if (amount > shakeIntensity) shakeIntensity = amount; }
+function rectsOverlap(a, b){ return !(a.x+a.w < b.x || a.x > b.x+b.w || a.y+a.h < b.y || a.y > b.y+b.h); }
+
+/* ══════════════ РАЗРЫВ ══════════════ */
+function makeBreakLine(){
+  const N = 6;
+  const pts = [{x:0.3+Math.random()*0.4, y:0}];
+  for (let i=1;i<=N;i++) pts.push({x:0.18+Math.random()*0.64, y:i/(N+1)});
+  pts.push({x:0.3+Math.random()*0.4, y:1});
+  return pts;
+}
+const makeLeftPoly = l => [{x:0,y:0}, ...l, {x:0,y:1}];
+const makeRightPoly = l => [{x:1,y:0}, ...l, {x:1,y:1}];
+function polyPath(poly,x,y,w,h){
+  ctx.beginPath();
+  ctx.moveTo(x+poly[0].x*w, y+poly[0].y*h);
+  for (let i=1;i<poly.length;i++) ctx.lineTo(x+poly[i].x*w, y+poly[i].y*h);
+  ctx.closePath();
+}
+const polys = {};
+let nextQuestKind = 'puzzle';
+
+/* ══════════════ СОСТОЯНИЕ ══════════════ */
+const rooms = [];
+let topY = 0, roomCounter = 0;
+const effects = [];
+const player = { x:0, y:0, r:PLAYER_R, dir: 1, angle: 0, targetAngle: 0 };
+const camera = { x:0, y:0 };
+let hoveredPoster = null, hoveredPiece = null, hoveredSlot = null;
+let hoveredPainting = null, hoveredOrderSlot = null, hoveredFilledSlot = null;
+let hoveredNote = false, hoveredLever = false, hoveredBox = null, hoveredPC = false;
+let stepTimer = 0;
+
+const puzzleState = { active:false, solved:false, timeLeft:PUZZLE_TIME, slots:[], pieces:[], heldPiece:null, entranceDoorOpen:true, entranceDoorAnim:0, entranceDoorClosing:false };
+const orderState = { active:false, solved:false, slots:[], paintings:[], held:null, notePicked:false, noteX:0, noteY:0, sequence:[], entranceDoorOpen:true, entranceDoorAnim:0, entranceDoorClosing:false, chaser: { active:false, x:0, y:0, r:CHASER_R, targetX:0, targetY:0, angle:0, mode:'patrol', targetTimer:0, room:null, stuckTimer:0, lastX:0, lastY:0, lastSeenX:0, lastSeenY:0, searchTimer:0, searchAngle:0, visible:false } };
+const ticketState = { active:false, pcX:0, pcY:0, pcW:120, pcH:90, room:null, bought:false, entranceDoorAnim:0, entranceDoorClosing:false, entranceDoorOpen:true };
+const monster = { active:false, phase:'idle', warningTimer:0, searchTimer:0, attackTimer:0, leaveTimer:0, x:0, y:0, r:MONSTER_R, targetX:0, targetY:0, targetTimer:0, room:null, attackPoster:null, pauseAtAlcove:0, stuckTimer:0, lastX:0, lastY:0 };
+const corridorState = { active: false, chaserY: 0, chaserSpeed: CORRIDOR_CHASER_SPEED, roomsCreated: 0, lastRoomTopY: null, bannerTimer: 0, cooldownRooms: 0, lastSeenRoom: 1 };
+
+let monsterCooldown = 0, lastSeenRoomForMonster = 1;
+let dying = false, deathTimer = 0, deathReason = 'monster';
+let pcOpen = false;
+
+/* ══════════════ КОРОБКИ ══════════════ */
+function spawnBoxes(room, minC, maxC){
+  room.boxes = [];
+  if (room.kind !== 'normal' && room.kind !== 'ticket' && room.kind !== 'corridor') return;
+  const red = boxReduction();
+  let count = Math.max(1, Math.round(rndInt(minC, maxC) * red));
+  const bw = 46, bh = 46;
+  for (let i = 0; i < count; i++){
+    for (let attempt = 0; attempt < 400; attempt++){
+      const bx = rnd(room.xL + 60, room.xR - 60 - bw);
+      const by = rnd(room.yTop + 90, room.yBottom - 90 - bh);
+      let ok = true;
+      for (const w of room.walls){
+        if (bx+bw > w.x-16 && bx < w.x+w.w+16 && by+bh > w.y-16 && by < w.y+w.h+16){ ok = false; break; }
+      }
+      if (!ok) continue;
+      for (const p of room.posters){
+        const dx = (bx+bw/2) - (p.colX+p.colW/2), dy = (by+bh/2) - (p.colY+p.colH/2);
+        if (dx*dx+dy*dy < 170*170){ ok = false; break; }
+      }
+      if (!ok) continue;
+      const overlapsGapX = (bx+bw > -HALF_GAP-30 && bx < HALF_GAP+30);
+      if (overlapsGapX && room.kind === 'normal'){
+        if (by < room.yTop+130 || by+bh > room.yBottom-130) ok = false;
+      }
+      if (!ok) continue;
+      for (const b of room.boxes){
+        const dx = (bx+bw/2)-(b.x+b.w/2), dy = (by+bh/2)-(b.y+b.h/2);
+        if (dx*dx+dy*dy < 95*95){ ok = false; break; }
+      }
+      if (!ok) continue;
+      if (room.index === 0){
+        const dx = bx+bw/2, dy = (by+bh/2) - (room.yBottom-160);
+        if (dx*dx+dy*dy < 150*150) continue;
+      }
+      if (room.kind === 'ticket' && room.pcX !== undefined){
+        const dx = (bx+bw/2)-(room.pcX+room.pcW/2), dy = (by+bh/2)-(room.pcY+room.pcH/2);
+        if (dx*dx+dy*dy < 200*200) continue;
+      }
+      room.boxes.push({ x:bx, y:by, w:bw, h:bh, hp:3, broken:false, hitT:0, hitCooldown:0, particles:[] });
+      break;
+    }
+  }
+}
+function spawnGarbage(room){
+  room.garbage = [];
+  if (room.kind !== 'normal') return;
+  for (let i = 0; i < 3; i++){
+    for (let attempt = 0; attempt < 200; attempt++){
+      const size = rnd(100, 150);
+      const gx = rnd(room.xL + size/2 + 20, room.xR - size/2 - 20);
+      const gy = rnd(room.yTop + size/2 + 20, room.yBottom - size/2 - 20);
+      const gRect = { x: gx - size/2, y: gy - size/2, w: size, h: size };
+      let ok = true;
+      for (const w of room.walls){ if (rectsOverlap(gRect, { x:w.x, y:w.y, w:w.w, h:w.h })){ ok = false; break; } }
+      if (!ok) continue;
+      for (const g of room.garbage){
+        const g2 = { x: g.x - g.size/2, y: g.y - g.size/2, w: g.size, h: g.size };
+        if (rectsOverlap(gRect, g2)){ ok = false; break; }
+      }
+      if (!ok) continue;
+      room.garbage.push({ x: gx, y: gy, rot: rnd(0, Math.PI*2), size, type: Math.random() < 0.5 ? 'musor' : 'musor1' });
+      break;
+    }
+  }
+}
+
+/* ══════════════ КОРИДОР ══════════════ */
+function makeCorridorRoom(index, yBottom){
+  const width = CORRIDOR_WIDTH, height = CORRIDOR_HEIGHT;
+  const yTop = yBottom - height;
+  const xL = -width/2, xR = width/2;
+  const walls = [];
+  const doorW = CORRIDOR_DOOR_W;
+  walls.push({ x: xL-DEPTH, y: yTop, w: DEPTH, h: height });
+  walls.push({ x: xR, y: yTop, w: DEPTH, h: height });
+  walls.push({ x: xL-DEPTH, y: yTop-WALL, w: (width/2-doorW/2)+DEPTH, h: WALL });
+  walls.push({ x: doorW/2, y: yTop-WALL, w: (width/2-doorW/2)+DEPTH, h: WALL });
+  walls.push({ x: xL-DEPTH, y: yBottom, w: (width/2-doorW/2)+DEPTH, h: WALL });
+  walls.push({ x: doorW/2, y: yBottom, w: (width/2-doorW/2)+DEPTH, h: WALL });
+  const blockers = 5, blkW = 420, blkH = 30;
+  for (let i = 1; i <= blockers; i++){
+    const by = yTop + i * (height / (blockers + 1)) - blkH/2;
+    if (i % 2 === 1) walls.push({ x: xL, y: by, w: blkW, h: blkH });
+    else walls.push({ x: xR - blkW, y: by, w: blkW, h: blkH });
+  }
+  const room = { index, kind:'corridor', yTop, yBottom, xL, xR, walls,
+    posters: [], alcoves: [], boxes: [], garbage: [], width, height,
+    floorColor: '#1a0a0a', wallColor: '#3a1a1a', alcoveFloorColor: '#0a0505',
+    alpha: 1, dying: false, exitDoorOpen: true };
+  spawnBoxes(room, 1, 2);
+  return room;
+}
+
+/* ══════════════ ГЕНЕРАЦИЯ ══════════════ */
+function makeRoom(index, yBottom, kind){
+  const isFirst = index === 0;
+
+  if (kind === 'puzzle'){
+    const width = PUZZLE_W, height = PUZZLE_H;
+    const yTop = yBottom - height;
+    const xL = -width/2, xR = width/2;
+    const walls = [];
+    const doorW = 120;
+    walls.push({x:xL-DEPTH, y:yTop, w:DEPTH, h:height});
+    walls.push({x:xR, y:yTop, w:DEPTH, h:height});
+    walls.push({x:xL-DEPTH, y:yTop-WALL, w:(width/2-doorW/2)+DEPTH, h:WALL});
+    walls.push({x:doorW/2, y:yTop-WALL, w:(width/2-doorW/2)+DEPTH, h:WALL});
+    walls.push({x:xL-DEPTH, y:yBottom, w:(width/2-doorW/2)+DEPTH, h:WALL});
+    walls.push({x:doorW/2, y:yBottom, w:(width/2-doorW/2)+DEPTH, h:WALL});
+    const add = (x,y,w,h) => walls.push({x,y,w,h});
+    const T = 26;
+    add(xL-DEPTH, yTop+520, DEPTH+260, T); add(xR-260, yTop+520, DEPTH+260, T);
+    add(-80, yTop+600, 220, T);
+    add(xL-DEPTH, yTop+700, DEPTH+300, T); add(xR-300, yTop+700, DEPTH+300, T);
+    add(-180, yTop+820, 320, T); add(xL+320, yTop+880, 260, T); add(xR-580, yTop+880, 260, T);
+    add(xL-DEPTH, yTop+1000, DEPTH+240, T); add(xR-240, yTop+1000, DEPTH+240, T);
+    add(-100, yTop+1120, 260, T); add(xL+220, yTop+1180, 300, T); add(xR-520, yTop+1180, 300, T);
+    add(xL-DEPTH, yTop+1300, DEPTH+280, T); add(xR-280, yTop+1300, DEPTH+280, T);
+    add(-220, yTop+1420, 300, T); add(xL+400, yTop+1480, 240, T); add(xR-640, yTop+1480, 240, T);
+    add(xL-DEPTH, yTop+1600, DEPTH+300, T); add(xR-300, yTop+1600, DEPTH+300, T);
+    add(-140, yTop+1720, 300, T); add(xL+300, yTop+1780, 280, T); add(xR-580, yTop+1780, 280, T);
+    add(xL-DEPTH, yTop+1900, DEPTH+260, T); add(xR-260, yTop+1900, DEPTH+260, T);
+    add(-200, yTop+2020, 320, T); add(xL+500, yTop+2060, 200, T); add(xR-700, yTop+2060, 200, T);
+    return { index, kind:'puzzle', yTop, yBottom, xL, xR, walls, posters:[], alcoves:[], boxes:[], garbage:[], width, height,
+      floorColor:'#151210', wallColor:'#2a2520', alcoveFloorColor:'#0a0806',
+      alpha:1, dying:false, exitDoorOpen:false,
+      entranceDoorX:-doorW/2, entranceDoorY:yBottom, entranceDoorW:doorW, entranceDoorH:WALL,
+      exitDoorX:-doorW/2, exitDoorY:yTop-WALL, exitDoorW:doorW, exitDoorH:WALL };
+  }
+
+  if (kind === 'order'){
+    const width = ORDER_W, height = ORDER_H;
+    const yTop = yBottom - height;
+    const xL = -width/2, xR = width/2;
+    const walls = [];
+    const doorW = 100;
+    walls.push({x:xL-DEPTH, y:yTop, w:DEPTH, h:height});
+    walls.push({x:xR, y:yTop, w:DEPTH, h:height});
+    walls.push({x:xL-DEPTH, y:yTop-WALL, w:(width/2-doorW/2)+DEPTH, h:WALL});
+    walls.push({x:doorW/2, y:yTop-WALL, w:(width/2-doorW/2)+DEPTH, h:WALL});
+    walls.push({x:xL-DEPTH, y:yBottom, w:(width/2-doorW/2)+DEPTH, h:WALL});
+    walls.push({x:doorW/2, y:yBottom, w:(width/2-doorW/2)+DEPTH, h:WALL});
+    const T = 28;
+    const add = (x,y,w,h) => walls.push({x,y,w,h});
+    add(xL-DEPTH, yTop+480, DEPTH+280, T); add(xR-280, yTop+580, DEPTH+280, T);
+    add(-160, yTop+700, 320, T); add(xL-DEPTH, yTop+820, DEPTH+340, T);
+    add(xR-340, yTop+940, DEPTH+340, T); add(xL+320, yTop+1060, 340, T);
+    add(xR-660, yTop+1060, 340, T); add(xL-DEPTH, yTop+1200, DEPTH+260, T);
+    add(xR-260, yTop+1320, DEPTH+260, T); add(-200, yTop+1440, 400, T);
+    add(xL+500, yTop+1560, 300, T); add(xR-800, yTop+1560, 300, T);
+    return { index, kind:'order', yTop, yBottom, xL, xR, walls, posters:[], alcoves:[], boxes:[], garbage:[], width, height,
+      floorColor:'#12141a', wallColor:'#252a35', alcoveFloorColor:'#080a0f',
+      alpha:1, dying:false, exitDoorOpen:false,
+      entranceDoorX:-doorW/2, entranceDoorY:yBottom, entranceDoorW:doorW, entranceDoorH:WALL,
+      exitDoorX:-doorW/2, exitDoorY:yTop-WALL, exitDoorW:doorW, exitDoorH:WALL };
+  }
+
+  if (kind === 'ticket'){
+    const width = TICKET_W, height = TICKET_H;
+    const yTop = yBottom - height;
+    const xL = -width/2, xR = width/2;
+    const walls = [];
+    const doorW = 100;
+    walls.push({x:xL-DEPTH, y:yTop, w:DEPTH, h:height});
+    walls.push({x:xR, y:yTop, w:DEPTH, h:height});
+    walls.push({x:xL-DEPTH, y:yTop-WALL, w:(width/2-doorW/2)+DEPTH, h:WALL});
+    walls.push({x:doorW/2, y:yTop-WALL, w:(width/2-doorW/2)+DEPTH, h:WALL});
+    walls.push({x:xL-DEPTH, y:yBottom, w:(width/2-doorW/2)+DEPTH, h:WALL});
+    walls.push({x:doorW/2, y:yBottom, w:(width/2-doorW/2)+DEPTH, h:WALL});
+    const pcW = 120, pcH = 90;
+    const pcX = xL + 130, pcY = yTop + 140;
+    walls.push({x:pcX, y:pcY, w:pcW, h:pcH});
+    const room = { index, kind:'ticket', yTop, yBottom, xL, xR, walls, posters:[], alcoves:[], boxes:[], garbage:[],
+      width, height,
+      floorColor:'#1a1510', wallColor:'#3a2a1a', alcoveFloorColor:'#0a0806',
+      alpha:1, dying:false, exitDoorOpen:false,
+      entranceDoorX:-doorW/2, entranceDoorY:yBottom, entranceDoorW:doorW, entranceDoorH:WALL,
+      exitDoorX:-doorW/2, exitDoorY:yTop-WALL, exitDoorW:doorW, exitDoorH:WALL,
+      pcX, pcY, pcW, pcH };
+    spawnBoxes(room, 3, 6);
+    return room;
+  }
+
+  const width = rnd(400, 620), height = rnd(450, 700);
+  const yTop = yBottom - height;
+  const xL = -width/2, xR = width/2;
+  const walls = [], posters = [], alcoves = [];
+  const add = (x,y,w,h) => { if (w>0.5 && h>0.5) walls.push({x,y,w,h}); };
+  const sideSpan = width/2 - HALF_GAP + DEPTH;
+  add(xL-DEPTH, yTop-WALL, sideSpan, WALL);
+  add(HALF_GAP, yTop-WALL, sideSpan, WALL);
+  if (isFirst) add(xL-DEPTH, yBottom, width+DEPTH*2, WALL);
+  else { add(xL-DEPTH, yBottom, sideSpan, WALL); add(HALF_GAP, yBottom, sideSpan, WALL); }
+  function buildSide(sign){
+    const isLeft = sign < 0;
+    const wallX = isLeft ? xL-DEPTH : xR;
+    let holeTop = 0, holeH = 0, hasHole = false;
+    if (!isFirst && Math.random() < HOLE_CHANCE){
+      holeH = clamp(height*0.16, 80, 120);
+      const margin = Math.max(150, height*0.22);
+      const minTop = yTop+margin, maxTop = yBottom-margin-holeH;
+      if (maxTop > minTop){ holeTop = rnd(minTop, maxTop); hasHole = true; }
+    }
+    if (!hasHole){ add(wallX, yTop, DEPTH, height); return; }
+    const holeBottom = holeTop + holeH;
+    add(wallX, yTop, DEPTH, holeTop-yTop);
+    add(wallX, holeBottom, DEPTH, yBottom-holeBottom);
+    const wallOuterX = isLeft ? xL-DEPTH : xR+DEPTH;
+    const backX = isLeft ? wallOuterX-ALCOVE : wallOuterX;
+    if (isLeft){
+      add(backX-ALCOVE_T, holeTop-ALCOVE_T, ALCOVE_T, holeH+2*ALCOVE_T);
+      add(backX, holeTop-ALCOVE_T, ALCOVE, ALCOVE_T);
+      add(backX, holeBottom, ALCOVE, ALCOVE_T);
+    } else {
+      add(backX, holeTop-ALCOVE_T, ALCOVE_T, holeH+2*ALCOVE_T);
+      add(backX-ALCOVE, holeTop-ALCOVE_T, ALCOVE, ALCOVE_T);
+      add(backX-ALCOVE, holeBottom, ALCOVE, ALCOVE_T);
+    }
+    const floorX = isLeft ? backX : xR;
+    const floorW = isLeft ? (xL-backX) : (backX-xR);
+    alcoves.push({x:floorX, y:holeTop, w:floorW, h:holeH});
+    const posterW = 14, posterH = holeH+20;
+    const posterX = isLeft ? xL : xR-posterW;
+    const posterY = holeTop-10;
+    posters.push({ side: isLeft ? 'left' : 'right',
+      origX:posterX, origY:posterY, x:posterX, y:posterY, w:posterW, h:posterH,
+      colX:wallX, colY:holeTop, colW:DEPTH, colH:holeH,
+      room:null, state:'idle', dropX:0, dropY:0 });
+  }
+  buildSide(-1); buildSide(1);
+  const hue = rndInt(215, 255), lit = rndInt(9, 14);
+  const room = { index, kind:'normal', yTop, yBottom, xL, xR, walls, posters, alcoves, boxes:[], garbage:[], width, height,
+    floorColor:`hsl(${hue},9%,${lit}%)`, wallColor:`hsl(${hue},8%,${lit+13}%)`,
+    alcoveFloorColor:`hsl(${hue},10%,${Math.max(3,lit-5)}%)`,
+    alpha:1, dying:false };
+  room.waypoints = buildWaypoints(room);
+  for (const p of room.posters) p.room = room;
+  spawnBoxes(room, 1, 3);
+  if (!isFirst && Math.random() < 0.08) spawnGarbage(room);
+  return room;
+}
+
+function buildWaypoints(room){
+  const wps = [];
+  const m = 100;
+  wps.push({x:room.xL+m, y:room.yTop+m});
+  wps.push({x:room.xR-m, y:room.yTop+m});
+  wps.push({x:room.xL+m, y:room.yBottom-m});
+  wps.push({x:room.xR-m, y:room.yBottom-m});
+  wps.push({x:0, y:(room.yTop+room.yBottom)/2});
+  for (const p of room.posters){
+    const py = p.colY + p.colH/2;
+    const wx = p.side === 'left' ? room.xL+120 : room.xR-120;
+    wps.push({x:wx, y:py});
+  }
+  return wps;
+}
+
+/* ══════════════ КВЕСТ-КОМНАТЫ ══════════════ */
+function scatterPositions(room, count, pieceW, pieceH, minGap){
+  const positions = [];
+  const margin = 80;
+  const minX = room.xL+margin, maxX = room.xR-margin-pieceW;
+  const minY = room.yTop+700, maxY = room.yBottom-margin-pieceH;
+  for (let i = 0; i < count; i++){
+    let placed = false;
+    for (let attempt = 0; attempt < 1500; attempt++){
+      const px = rnd(minX, maxX), py = rnd(minY, maxY);
+      let ok = true;
+      for (const w of room.walls){
+        if (px+pieceW > w.x && px < w.x+w.w && py+pieceH > w.y && py < w.y+w.h){ ok = false; break; }
+      }
+      if (!ok) continue;
+      for (const p of positions){
+        const dx = (px+pieceW/2)-(p.x+pieceW/2), dy = (py+pieceH/2)-(p.y+pieceH/2);
+        if (dx*dx+dy*dy < minGap*minGap){ ok = false; break; }
+      }
+      if (!ok) continue;
+      positions.push({x:px, y:py});
+      placed = true; break;
+    }
+    if (!placed) positions.push({x:rnd(minX, maxX), y:rnd(minY, maxY)});
+  }
+  return positions;
+}
+function pickImageIndices(count){
+  const n = Math.max(loadedImages.length, 10);
+  const indices = [];
+  for (let i = 0; i < n; i++) indices.push(i);
+  const shuffled = shuffle(indices);
+  const result = [];
+  for (let i = 0; i < count; i++) result.push(shuffled[i % shuffled.length]);
+  return result;
+}
+function initPuzzle(room){
+  const slotW = PUZZLE_SLOT_SIZE, slotH = PUZZLE_SLOT_SIZE, cols = 3, gap = 36;
+  const chosen = pickImageIndices(PUZZLE_SLOTS);
+  for (const k in polys) delete polys[k];
+  for (const imgIdx of chosen){
+    const line = makeBreakLine();
+    polys[imgIdx] = { left: makeLeftPoly(line), right: makeRightPoly(line) };
+  }
+  const totalW = cols*slotW + (cols-1)*gap;
+  const startX = -totalW/2, startY = room.yTop+120;
+  puzzleState.slots = []; puzzleState.pieces = [];
+  for (let i = 0; i < PUZZLE_SLOTS; i++){
+    const col = i % cols, row = Math.floor(i / cols);
+    const cellX = startX + col*(slotW+gap);
+    const cellY = startY + row*(slotH+gap);
+    puzzleState.slots.push({ imgIndex:chosen[i], part:'left', x:cellX, y:cellY, w:slotW, h:slotH, filled:true });
+    puzzleState.slots.push({ imgIndex:chosen[i], part:'right', x:cellX, y:cellY, w:slotW, h:slotH, filled:false });
+  }
+  const spawns = scatterPositions(room, PUZZLE_SLOTS, slotW, slotH, 200);
+  for (let i = 0; i < PUZZLE_SLOTS; i++){
+    puzzleState.pieces.push({ imgIndex:chosen[i], part:'right', x:spawns[i].x, y:spawns[i].y, w:slotW, h:slotH });
+  }
+  puzzleState.active = false; puzzleState.solved = false;
+  puzzleState.timeLeft = PUZZLE_TIME;
+  puzzleState.heldPiece = null;
+  puzzleState.entranceDoorOpen = true; puzzleState.entranceDoorAnim = 0; puzzleState.entranceDoorClosing = false;
+  room.exitDoorOpen = false;
+}
+function initOrder(room){
+  const chosen = pickImageIndices(ORDER_SLOTS);
+  orderState.sequence = chosen.slice();
+  const slotW = ORDER_SLOT_SIZE, slotH = ORDER_SLOT_SIZE, gap = 24;
+  const totalW = ORDER_SLOTS*slotW + (ORDER_SLOTS-1)*gap;
+  const startX = -totalW/2, slotY = room.yTop+150;
+  orderState.slots = [];
+  for (let i = 0; i < ORDER_SLOTS; i++){
+    orderState.slots.push({ index:i, number:orderState.sequence[i],
+      x:startX+i*(slotW+gap), y:slotY, w:slotW, h:slotH, filled:false, placedNumber:null });
+  }
+  const allIdx = [];
+  const n = Math.max(loadedImages.length, 10);
+  for (let i = 0; i < n; i++) allIdx.push(i);
+  const decoys = shuffle(allIdx.filter(i => !orderState.sequence.includes(i))).slice(0, 3);
+  const paintingNumbers = shuffle([...orderState.sequence, ...decoys]);
+  const pW = ORDER_SLOT_SIZE, pH = ORDER_SLOT_SIZE;
+  const spawns = scatterPositions(room, paintingNumbers.length, pW, pH, 240);
+  orderState.paintings = paintingNumbers.map((num, i) => ({
+    number:num, x:spawns[i].x, y:spawns[i].y, w:pW, h:pH
+  }));
+  const noteSpots = scatterPositions(room, 1, 40, 50, 0);
+  orderState.noteX = noteSpots[0].x; orderState.noteY = noteSpots[0].y;
+  orderState.notePicked = false;
+  orderState.held = null; orderState.active = false; orderState.solved = false;
+  /* У квеста с порядком картин нет таймера. */
+  orderState.timeLeft = 0;
+  orderState.entranceDoorOpen = true; orderState.entranceDoorAnim = 0; orderState.entranceDoorClosing = false;
+  const c = orderState.chaser;
+  c.active = true;
+  c.x = room.xL + 200; c.y = room.yBottom - 200;
+  c.angle = Math.atan2(player.y - c.y, player.x - c.x);
+  c.lastSeenX = c.x; c.lastSeenY = c.y;
+  c.searchTimer = 0; c.searchAngle = c.angle;
+  c.visible = false;
+  c.mode = 'patrol';
+  c.targetX = room.xR - 200; c.targetY = room.yTop + 300;
+  c.targetTimer = 0; c.room = room;
+  c.stuckTimer = 0; c.lastX = c.x; c.lastY = c.y; c.r = CHASER_R;
+  pushOutOfWalls(c, room);
+  room.exitDoorOpen = false;
+}
+function initTicket(room){
+  ticketState.active = true;
+  ticketState.bought = false;
+  ticketState.pcX = room.pcX;
+  ticketState.pcY = room.pcY;
+  ticketState.pcW = room.pcW;
+  ticketState.pcH = room.pcH;
+  ticketState.room = room;
+  ticketState.entranceDoorOpen = true;
+  ticketState.entranceDoorAnim = 0;
+  ticketState.entranceDoorClosing = false;
+  room.exitDoorOpen = false;
+}
+
+/* ══════════════ КОРИДОРНАЯ ПОГОНЯ ══════════════ */
+function startCorridorEvent(){
+  corridorState.active = true;
+  corridorState.roomsCreated = 0;
+  corridorState.lastRoomTopY = null;
+  corridorState.chaserY = player.y + CORRIDOR_CHASER_START_OFFSET;
+  corridorState.chaserSpeed = CORRIDOR_CHASER_SPEED;
+  corridorState.bannerTimer = 0;
+  monster.active = false; monster.phase = 'idle';
+  addShake(20);
+}
+function endCorridorEvent(){
+  corridorState.active = false;
+  corridorState.chaserY = -1e9;
+  corridorState.cooldownRooms = 12;
+  corridorState.lastSeenRoom = passedRoom;
+  addShake(14);
+}
+function maybeTriggerCorridor(){
+  if (corridorState.active || dying) return;
+  if (monster.active) return;
+  if (currentFloor < 2) return;
+  if (burnEvent.active) return;
+  if (puzzleState.active && !puzzleState.solved) return;
+  if (orderState.active && !orderState.solved) return;
+  if (ticketState.active && !ticketState.bought) return;
+  if (corridorState.lastSeenRoom === passedRoom) return;
+  corridorState.lastSeenRoom = passedRoom;
+  if (corridorState.cooldownRooms > 0){ corridorState.cooldownRooms--; return; }
+  if (passedRoom < 5) return;
+  const curRoom = rooms.find(r => player.y >= r.yTop && player.y <= r.yBottom);
+  if (!curRoom || curRoom.kind !== 'normal') return;
+  if (Math.random() < 0.35) startCorridorEvent();
+}
+function updateCorridorChaser(dt){
+  if (!corridorState.active) return;
+  corridorState.bannerTimer += dt;
+  const speed = corridorState.chaserSpeed + (currentFloor - 2) * 15;
+  corridorState.chaserY -= speed * dt;
+  if (player.y >= corridorState.chaserY - PLAYER_R){ killPlayer('corridor'); return; }
+  if (corridorState.roomsCreated >= CORRIDOR_COUNT && corridorState.lastRoomTopY !== null){
+    if (player.y < corridorState.lastRoomTopY - 100) endCorridorEvent();
+  }
+}
+
+/* ══════════════ ДОБАВЛЕНИЕ КОМНАТЫ ══════════════ */
+function addRoom(){
+  /* Коридорный режим — только коридоры */
+  if (corridorState.active && corridorState.roomsCreated < CORRIDOR_COUNT){
+    const room = makeCorridorRoom(roomCounter++, topY);
+    corridorState.roomsCreated++;
+    if (corridorState.roomsCreated === CORRIDOR_COUNT) corridorState.lastRoomTopY = room.yTop;
+    topY = room.yTop;
+    rooms.push(room);
+    return room;
+  }
+
+  /* Номер комнаты (1-based) */
+  const roomNumber = roomCounter + 1;
+
+  /* Определяем тип комнаты */
+  let kind = 'normal';
+
+  /* ПК спавнится обязательно, если номер дошёл и не идёт погоня */
+  if (!corridorState.active && roomNumber >= nextPCRoomNumber){
+    kind = 'ticket';
+    nextPCRoomNumber += TICKET_INTERVAL;
+  }
+  /* Иначе — квест с шансом, если хватает гэпа и не блокировано */
+  else if (!corridorState.active && !monster.active && !burnEvent.active &&
+           roomsSinceQuest >= MIN_QUEST_GAP && Math.random() < QUEST_CHANCE){
+    kind = nextQuestKind;
+    nextQuestKind = nextQuestKind === 'puzzle' ? 'order' : 'puzzle';
+    roomsSinceQuest = 0;
+  } else {
+    roomsSinceQuest++;
+  }
+
+  const room = makeRoom(roomCounter++, topY, kind);
+
+  if (kind === 'puzzle'){
+    initPuzzle(room);
+    monsterCooldown = Math.max(monsterCooldown, 4);
+  } else if (kind === 'order'){
+    initOrder(room);
+    monsterCooldown = Math.max(monsterCooldown, 4);
+  } else if (kind === 'ticket'){
+    initTicket(room);
+    monsterCooldown = Math.max(monsterCooldown, 4);
+  }
+
+  if (monster.active && kind !== 'normal'){ monster.active = false; monster.phase = 'idle'; }
+  topY = room.yTop;
+  rooms.push(room);
+  return room;
+}
+
+/* ══════════════ ИНИЦИАЛИЗАЦИЯ ══════════════ */
+addRoom();
+const firstRoom = rooms[0];
+player.x = 0; player.y = firstRoom.yBottom - 160;
+camera.x = player.x; camera.y = player.y;
+
+/* ══════════════ ВВОД ══════════════ */
+const keys = Object.create(null);
+const BLOCK = new Set(['arrowup','arrowdown','arrowleft','arrowright',' ']);
+window.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (BLOCK.has(k)) e.preventDefault();
+  if (k === 'escape' && pcOpen) closePC();
+  keys[k] = true;
+});
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+const mouse = { x:-9999, y:-9999 };
+canvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+canvas.addEventListener('mouseleave', () => { mouse.x = mouse.y = -9999; });
+
+const touchMove = { x:0, y:0, active:false, pointerId:null };
+const joystick = document.getElementById('joystick');
+const joystickKnob = document.getElementById('joystickKnob');
+const actionButton = document.getElementById('actionButton');
+function resetJoystick(){
+  touchMove.x = 0; touchMove.y = 0; touchMove.active = false; touchMove.pointerId = null;
+  joystickKnob.style.transform = 'translate(-50%, -50%)';
+}
+function updateJoystick(e){
+  const rect = joystick.getBoundingClientRect();
+  const radius = rect.width * 0.5;
+  const knobRadius = 31;
+  let dx = e.clientX - (rect.left + radius);
+  let dy = e.clientY - (rect.top + radius);
+  const max = radius - knobRadius;
+  const length = Math.hypot(dx, dy);
+  if (length > max){ dx = dx / length * max; dy = dy / length * max; }
+  touchMove.x = dx / max;
+  touchMove.y = dy / max;
+  touchMove.active = true;
+  joystickKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+}
+joystick.addEventListener('pointerdown', e => {
+  e.preventDefault(); touchMove.pointerId = e.pointerId; joystick.setPointerCapture(e.pointerId); updateJoystick(e);
+});
+joystick.addEventListener('pointermove', e => {
+  if (e.pointerId === touchMove.pointerId) { e.preventDefault(); updateJoystick(e); }
+});
+joystick.addEventListener('pointerup', e => { if (e.pointerId === touchMove.pointerId) resetJoystick(); });
+joystick.addEventListener('pointercancel', resetJoystick);
+actionButton.addEventListener('pointerdown', e => { e.preventDefault(); handleInteraction(); });
+
+function canDropAt(px, py, pw, ph){
+  for (const room of rooms){
+    if (room.alpha < 0.5) continue;
+    for (const w of room.walls){
+      if (px+pw > w.x && px < w.x+w.w && py+ph > w.y && py < w.y+w.h) return false;
+    }
+  }
+  return true;
+}
+
+/* ══════════════ РЫЧАГ ══════════════ */
+function spawnLever(){
+  const curIdx = passedRoom - 1;
+  let candidates = rooms.filter(r => r.kind === 'normal' && r.index > curIdx && r.index - curIdx <= 2);
+  if (candidates.length === 0) candidates = rooms.filter(r => r.kind === 'normal' && r.index > curIdx);
+  if (candidates.length === 0) return null;
+  const room = candidates[Math.floor(Math.random() * candidates.length)];
+  const leverW = 30, leverH = 50;
+  for (let attempt = 0; attempt < 300; attempt++){
+    const lx = rnd(room.xL + 80, room.xR - 80 - leverW);
+    const ly = rnd(room.yTop + 80, room.yBottom - 80 - leverH);
+    let ok = true;
+    for (const w of room.walls){
+      if (lx+leverW > w.x && lx < w.x+w.w && ly+leverH > w.y && ly < w.y+w.h){ ok = false; break; }
+    }
+    if (!ok) continue;
+    for (const p of room.posters){
+      const px = p.state === 'idle' ? p.colX : p.dropX;
+      const py = p.state === 'idle' ? p.colY : p.dropY;
+      const pw = p.state === 'idle' ? p.colW : p.w;
+      const ph = p.state === 'idle' ? p.colH : p.h;
+      if (lx+leverW > px && lx < px+pw && ly+leverH > py && ly < py+ph){ ok = false; break; }
+    }
+    if (!ok) continue;
+    for (const b of (room.boxes || [])){
+      if (b.broken) continue;
+      if (lx+leverW > b.x-20 && lx < b.x+b.w+20 && ly+leverH > b.y-20 && ly < b.y+b.h+20){ ok = false; break; }
+    }
+    if (!ok) continue;
+    return { x:lx, y:ly, w:leverW, h:leverH, room, flipped:false };
+  }
+  return { x:-leverW/2, y:(room.yTop + room.yBottom)/2 - leverH/2, w:leverW, h:leverH, room, flipped:false };
+}
+function startBurnEvent(){
+  if (burnEvent.active || isQuestRoomActive()) return;
+  burnEvent.active = true;
+  burnEvent.timer = 0;
+  burnEvent.lever = spawnLever();
+  if (!burnEvent.lever){ burnEvent.active = false; return; }
+  if (audioUnlocked){
+    try { sounds.kond.currentTime = 0; sounds.kond.play().catch(()=>{}); } catch(e){}
+  }
+}
+function endBurnEvent(){
+  burnEvent.active = false; burnEvent.timer = 0; burnEvent.lever = null;
+}
+
+/* ══════════════ УДАР ПО КОРОБКЕ ══════════════ */
+function hitBox(box){
+  if (box.broken || box.hitCooldown > 0) return;
+  box.hitCooldown = BOX_HIT_COOLDOWN;
+  box.hitT = 0.18;
+  box.hp--;
+  addShake(BOX_SHAKE_HIT);
+  if (box.hp <= 0){
+    box.broken = true;
+    addShake(BOX_SHAKE_BREAK);
+    playSound(sounds.udarazlom);
+    const numCoins = rndInt(5, 8);
+    for (let i = 0; i < numCoins; i++){
+      box.particles.push({ type:'coin', x: box.x + box.w/2 + rnd(-8,8), y: box.y + box.h/2 + rnd(-8,8),
+        vx: rnd(-140,140), vy: rnd(-320,-170),
+        rot: rnd(0, Math.PI*2), rotV: rnd(-8,8), life: 1.4, t: 0 });
+    }
+    for (let i = 0; i < 18; i++){
+      box.particles.push({ type:'debris', x: box.x + box.w/2 + rnd(-12,12), y: box.y + box.h/2 + rnd(-12,12),
+        vx: rnd(-220,220), vy: rnd(-260,60), size:rnd(4,10),
+        rot:rnd(0,Math.PI*2), rotV:rnd(-12,12), life:rnd(0.45,0.95), t:0 });
+    }
+    coinCount += numCoins;
+    playSound(sounds.moneta);
+  } else {
+    playSound(sounds.udar);
+  }
+}
+
+/* ══════════════ ПК ══════════════ */
+const pcOverlay = document.getElementById('pcOverlay');
+const pcBody = document.getElementById('pcBody');
+const pcCoinsEl = document.getElementById('pcCoins');
+const pcCloseBtn = document.getElementById('pcClose');
+
+function openPC(){ pcOpen = true; pcOverlay.style.display = 'flex'; renderPC(); }
+function closePC(){ pcOpen = false; pcOverlay.style.display = 'none'; }
+
+function extendFloor(){
+  if (ticketState.bought || coinCount < TICKET_COST) return;
+  coinCount -= TICKET_COST;
+  ticketState.bought = true;
+  currentFloor++;
+  if (ticketState.room) ticketState.room.exitDoorOpen = true;
+  addShake(18);
+  monsterCooldown = 0;
+  corridorState.cooldownRooms = 8;
+  corridorState.lastSeenRoom = passedRoom;
+  renderPC();
+}
+function renderPC(){
+  pcCoinsEl.textContent = coinCount;
+  pcCoinsEl.className = coinCount >= TICKET_COST ? 'ok' : 'no';
+
+  let html = '';
+  if (ticketState.bought){
+    html += `<div class="ok">✓ ЭТАЖ ПРОДЛЁН. Переход на этаж ${currentFloor}.</div>`;
+    html += `<div style="color:#8899aa;margin-top:8px;">Иди к выходу сверху.</div>`;
+  } else {
+    html += `<div>Продление даёт доступ к следующему этажу.</div>`;
+    html += `<div>Сложность вырастет.</div>`;
+    html += `<div style="margin-top:14px;font-size:16px;">Стоимость: <b>${TICKET_COST} ★</b></div>`;
+    html += `<button class="buyBtn" style="margin-top:14px;" id="pcExtendBtn" ${coinCount < TICKET_COST ? 'disabled' : ''}>ПРОДЛИТЬ</button>`;
+    if (coinCount < TICKET_COST){
+      html += `<div class="no" style="margin-top:8px;">Не хватает ${TICKET_COST - coinCount} ★</div>`;
+    }
+  }
+  pcBody.innerHTML = html;
+  const btn = document.getElementById('pcExtendBtn');
+  if (btn) btn.addEventListener('click', extendFloor);
+}
+pcCloseBtn.addEventListener('click', closePC);
+
+/* ══════════════ ИНТЕРАКТИВ ══════════════ */
+function handlePuzzleInteraction(){
+  const held = puzzleState.heldPiece;
+  if (held){
+    let target = null, bd = Infinity;
+    for (const s of puzzleState.slots){
+      if (s.filled) continue;
+      if (s.imgIndex !== held.imgIndex) continue;
+      if (s.part !== held.part) continue;
+      const d = distanceToRect(player.x, player.y, s.x, s.y, s.w, s.h);
+      if (d < bd){ bd = d; target = s; }
+    }
+    if (target && bd <= REACH_D){
+      target.filled = true;
+      const idx = puzzleState.pieces.indexOf(held);
+      if (idx >= 0) puzzleState.pieces.splice(idx, 1);
+      puzzleState.heldPiece = null;
+      playSound(sounds.podbor);
+      if (puzzleState.slots.every(s => s.filled)){
+        puzzleState.solved = true; puzzleState.active = false;
+        for (const r of rooms) if (r.kind === 'puzzle') r.exitDoorOpen = true;
+      }
+      return;
+    }
+    const nx = player.x - held.w/2, ny = player.y - held.h/2;
+    if (canDropAt(nx, ny, held.w, held.h)){ held.x = nx + rnd(-6,6); held.y = ny + rnd(-6,6); }
+    puzzleState.heldPiece = null;
+    playSound(sounds.podbor);
+    return;
+  }
+  let target = null, bd = Infinity;
+  for (const p of puzzleState.pieces){
+    const d = distanceToRect(player.x, player.y, p.x, p.y, p.w, p.h);
+    if (d > PLAYER_R + PICKUP_D) continue;
+    if (d < bd){ bd = d; target = p; }
+  }
+  if (target){
+    puzzleState.heldPiece = target;
+    playSound(sounds.podbor);
+  }
+}
+function handleOrderInteraction(){
+  if (orderState.held){
+    const held = orderState.held;
+    let target = null, bd = Infinity;
+    for (const s of orderState.slots){
+      if (s.filled) continue;
+      const d = distanceToRect(player.x, player.y, s.x, s.y, s.w, s.h);
+      if (d < bd){ bd = d; target = s; }
+    }
+    if (target && bd <= REACH_D){
+      target.filled = true; target.placedNumber = held.number;
+      const idx = orderState.paintings.indexOf(held);
+      if (idx >= 0) orderState.paintings.splice(idx, 1);
+      orderState.held = null;
+      playSound(sounds.podbor);
+      if (orderState.slots.every(s => s.filled && s.placedNumber === s.number)){
+        orderState.solved = true; orderState.active = false;
+        for (const r of rooms) if (r.kind === 'order') r.exitDoorOpen = true;
+      }
+      return;
+    }
+    const nx = player.x - held.w/2, ny = player.y - held.h/2;
+    if (canDropAt(nx, ny, held.w, held.h)){ held.x = nx + rnd(-6,6); held.y = ny + rnd(-6,6); }
+    orderState.held = null;
+    playSound(sounds.podbor);
+    return;
+  }
+  for (const s of orderState.slots){
+    if (!s.filled) continue;
+    if (s.placedNumber === s.number) continue;
+    const d = distanceToRect(player.x, player.y, s.x, s.y, s.w, s.h);
+    if (d <= REACH_D && d <= PLAYER_R + PICKUP_D + 60){
+      orderState.paintings.push({ number: s.placedNumber,
+        x: player.x - 50 + rnd(-10,10), y: player.y - 50 + rnd(-10,10),
+        w: s.w, h: s.h });
+      s.filled = false; s.placedNumber = null;
+      playSound(sounds.podbor);
+      return;
+    }
+  }
+  const ndx = player.x - (orderState.noteX + 20);
+  const ndy = player.y - (orderState.noteY + 25);
+  if (!orderState.notePicked && ndx*ndx + ndy*ndy < (PLAYER_R + 60)*(PLAYER_R + 60)){
+    orderState.notePicked = true;
+    playSound(sounds.podbor);
+    return;
+  }
+  let target = null, bd = Infinity;
+  for (const p of orderState.paintings){
+    const d = distanceToRect(player.x, player.y, p.x, p.y, p.w, p.h);
+    if (d > PLAYER_R + PICKUP_D) continue;
+    if (d < bd){ bd = d; target = p; }
+  }
+  if (target){
+    orderState.held = target;
+    playSound(sounds.podbor);
+  }
+}
+function handleInteraction(){
+  if (dying || pcOpen) return;
+  if (ticketState.active && hoveredPC){ openPC(); return; }
+  if (burnEvent.active && burnEvent.lever && !burnEvent.lever.flipped){
+    const lv = burnEvent.lever;
+    const d = distanceToRect(player.x, player.y, lv.x, lv.y, lv.w, lv.h);
+    if (d < PLAYER_R + LEVER_INTERACT_D){
+      lv.flipped = true;
+      playSound(sounds.podbor);
+      endBurnEvent();
+      return;
+    }
+  }
+  if (hoveredBox && !hoveredBox.broken){ hitBox(hoveredBox); return; }
+  if (puzzleState.active && !puzzleState.solved){ handlePuzzleInteraction(); return; }
+  if (orderState.active && !orderState.solved){ handleOrderInteraction(); return; }
+  if (!hoveredPoster) return;
+  playSound(sounds.podbor);
+  if (hoveredPoster.state === 'idle' || hoveredPoster.state === 'dropped') hoveredPoster.state = 'carried';
+  else if (hoveredPoster.state === 'carried'){
+    if (isPlayerInAlcoveZone(hoveredPoster)){
+      hoveredPoster.state = 'idle';
+      hoveredPoster.x = hoveredPoster.origX; hoveredPoster.y = hoveredPoster.origY;
+    } else {
+      hoveredPoster.state = 'dropped';
+      hoveredPoster.dropX = player.x - hoveredPoster.w/2;
+      hoveredPoster.dropY = player.y - hoveredPoster.h/2;
+    }
+  }
+}
+canvas.addEventListener('mousedown', e => { if (e.button === 0) handleInteraction(); });
+canvas.addEventListener('touchstart', e => {
+  const t = e.touches[0];
+  mouse.x = t.clientX; mouse.y = t.clientY;
+  updateHover(); handleInteraction(); e.preventDefault();
+}, { passive: false });
+
+/* ══════════════ КОЛЛИЗИИ ══════════════ */
+function pushCircleOutOfRect(entity, w){
+  const nx = clamp(entity.x, w.x, w.x+w.w);
+  const ny = clamp(entity.y, w.y, w.y+w.h);
+  const dx = entity.x-nx, dy = entity.y-ny;
+  const d2 = dx*dx+dy*dy;
+  if (d2 > 0.0001){
+    const d = Math.sqrt(d2);
+    if (d < entity.r) {
+      const push = (entity.r + 0.5 - d) / d;
+      entity.x += dx*push; entity.y += dy*push;
+    }
+    return;
+  }
+  /* Центр внутри стены: выталкиваем ровно за ближайшую грань. */
+  const left = entity.x-w.x, right = w.x+w.w-entity.x;
+  const top = entity.y-w.y, bottom = w.y+w.h-entity.y;
+  const nearest = Math.min(left, right, top, bottom);
+  if (nearest === left) entity.x = w.x - entity.r - 0.5;
+  else if (nearest === right) entity.x = w.x+w.w + entity.r + 0.5;
+  else if (nearest === top) entity.y = w.y - entity.r - 0.5;
+  else entity.y = w.y+w.h + entity.r + 0.5;
+}
+function sweepRects(rects){
+  for (const w of rects){
+    if (player.x+player.r < w.x || player.x-player.r > w.x+w.w ||
+        player.y+player.r < w.y || player.y-player.r > w.y+w.h) continue;
+    pushCircleOutOfRect(player, w);
+  }
+}
+function pushOutOfWalls(entity, room, includePosters){
+  for (const w of room.walls) pushCircleOutOfRect(entity, w);
+  if (includePosters){
+    for (const p of room.posters){
+      if (p.state === 'carried') continue;
+      const px = p.state === 'idle' ? p.colX : p.dropX;
+      const py = p.state === 'idle' ? p.colY : p.dropY;
+      const pw = p.state === 'idle' ? p.colW : p.w;
+      const ph = p.state === 'idle' ? p.colH : p.h;
+      const nx = clamp(entity.x, px, px+pw);
+      const ny = clamp(entity.y, py, py+ph);
+      const dx = entity.x-nx, dy = entity.y-ny;
+      const d2 = dx*dx+dy*dy;
+      if (d2 < entity.r*entity.r && d2 > 0.0001){
+        const d = Math.sqrt(d2);
+        const push = (entity.r-d)/d;
+        entity.x += dx*push; entity.y += dy*push;
+      }
+    }
+  }
+}
+function isPlayerInAlcoveZone(p){
+  return (player.x+player.r > p.colX && player.x-player.r < p.colX+p.colW &&
+          player.y+player.r > p.colY && player.y-player.r < p.colY+p.colH);
+}
+function getHidingAlcove(){
+  for (const room of rooms){
+    if (player.y < room.yTop || player.y > room.yBottom) continue;
+    for (const p of room.posters){
+      if (p.state !== 'idle') continue;
+      if (player.y < p.colY || player.y > p.colY+p.colH) continue;
+      if (p.side === 'left' && player.x < room.xL) return p;
+      if (p.side === 'right' && player.x > room.xR) return p;
+    }
+  }
+  return null;
+}
+function resolvePosterCollisions(){
+  const r = player.r;
+  for (const room of rooms){
+    if (room.yBottom < player.y-500 || room.yTop > player.y+500) continue;
+    for (const p of room.posters){
+      if (p.state === 'carried') continue;
+      const px = p.state === 'idle' ? p.x : p.dropX;
+      const py = p.state === 'idle' ? p.y : p.dropY;
+      if (player.x+r > px && player.x-r < px+p.w && player.y+r > py && player.y-r < py+p.h){
+        const dl = player.x+r-px, dr = (px+p.w)-(player.x-r);
+        const dtp = player.y+r-py, db = (py+p.h)-(player.y-r);
+        const min = Math.min(dl, dr, dtp, db);
+        if (min === dl) player.x = px-r;
+        else if (min === dr) player.x = px+p.w+r;
+        else if (min === dtp) player.y = py-r;
+        else player.y = py+p.h+r;
+      }
+    }
+  }
+}
+function resolveBoxCollisions(){
+  const r = player.r;
+  for (const room of rooms){
+    if (room.yBottom < player.y-500 || room.yTop > player.y+500) continue;
+    if (!room.boxes) continue;
+    for (const b of room.boxes){
+      if (b.broken) continue;
+      const px = b.x, py = b.y, pw = b.w, ph = b.h;
+      if (player.x+r > px && player.x-r < px+pw && player.y+r > py && player.y-r < py+ph){
+        const dl = player.x+r-px, dr = (px+pw)-(player.x-r);
+        const dtp = player.y+r-py, db = (py+ph)-(player.y-r);
+        const min = Math.min(dl, dr, dtp, db);
+        if (min === dl) player.x = px-r;
+        else if (min === dr) player.x = px+pw+r;
+        else if (min === dtp) player.y = py-r;
+        else player.y = py+ph+r;
+      }
+    }
+  }
+}
+function resolveCollisions(){
+  for (const room of rooms){
+    if (room.yBottom < player.y-500 || room.yTop > player.y+500) continue;
+    sweepRects(room.walls);
+    if ((room.kind === 'puzzle' || room.kind === 'order' || room.kind === 'ticket') && !room.exitDoorOpen){
+      const dx = room.exitDoorX, dy = room.exitDoorY, dw = room.exitDoorW, dh = room.exitDoorH;
+      if (player.x+player.r > dx && player.x-player.r < dx+dw &&
+          player.y+player.r > dy && player.y-player.r < dy+dh){
+        player.y = dy+dh+player.r;
+      }
+    }
+  }
+  const bottomRoom = rooms[0];
+  if (bottomRoom && player.y >= bottomRoom.yTop && player.y <= bottomRoom.yBottom){
+    sweepRects([{ x:-HALF_GAP, y:bottomRoom.yBottom, w:GAP, h:WALL }]);
+  }
+  resolvePosterCollisions();
+  resolveBoxCollisions();
+}
+
+/* ══════════════ НАВЕДЕНИЕ ══════════════ */
+function updateHover(){
+  hoveredPoster = null; hoveredPiece = null; hoveredSlot = null;
+  hoveredPainting = null; hoveredOrderSlot = null; hoveredFilledSlot = null;
+  hoveredNote = false; hoveredLever = false; hoveredBox = null; hoveredPC = false;
+  if (dying || pcOpen){ canvas.style.cursor = 'default'; return; }
+
+  if (ticketState.active && !ticketState.bought){
+    const d = distanceToRect(player.x, player.y, ticketState.pcX, ticketState.pcY, ticketState.pcW, ticketState.pcH);
+    if (d < PLAYER_R + PC_INTERACT_D){ hoveredPC = true; canvas.style.cursor = 'pointer'; return; }
+  }
+  if (burnEvent.active && burnEvent.lever && !burnEvent.lever.flipped){
+    const lv = burnEvent.lever;
+    const d = distanceToRect(player.x, player.y, lv.x, lv.y, lv.w, lv.h);
+    if (d < PLAYER_R + LEVER_INTERACT_D){ hoveredLever = true; canvas.style.cursor = 'pointer'; return; }
+  }
+  {
+    let best = null, bd = Infinity;
+    for (const room of rooms){
+      if (room.alpha < 0.5) continue;
+      if (room.yBottom < player.y - 400 || room.yTop > player.y + 400) continue;
+      if (!room.boxes) continue;
+      for (const b of room.boxes){
+        if (b.broken) continue;
+        const d = distanceToRect(player.x, player.y, b.x, b.y, b.w, b.h);
+        if (d > PLAYER_R + BOX_HIT_D) continue;
+        if (d < bd){ bd = d; best = b; }
+      }
+    }
+    if (best){ hoveredBox = best; canvas.style.cursor = 'pointer'; return; }
+  }
+  if (puzzleState.active && !puzzleState.solved){
+    if (puzzleState.heldPiece){
+      let best = null, bd = Infinity;
+      for (const s of puzzleState.slots){
+        if (s.filled) continue;
+        if (s.imgIndex !== puzzleState.heldPiece.imgIndex) continue;
+        if (s.part !== puzzleState.heldPiece.part) continue;
+        const d = distanceToRect(player.x, player.y, s.x, s.y, s.w, s.h);
+        if (d < bd){ bd = d; best = s; }
+      }
+      if (best && bd <= REACH_D) hoveredSlot = best;
+      canvas.style.cursor = hoveredSlot ? 'pointer' : 'default';
+      return;
+    } else {
+      let best = null, bd = Infinity;
+      for (const p of puzzleState.pieces){
+        const d = distanceToRect(player.x, player.y, p.x, p.y, p.w, p.h);
+        if (d > PLAYER_R + PICKUP_D) continue;
+        if (d < bd){ bd = d; best = p; }
+      }
+      hoveredPiece = best;
+      canvas.style.cursor = hoveredPiece ? 'pointer' : 'default';
+      return;
+    }
+  }
+  if (orderState.active && !orderState.solved){
+    if (orderState.held){
+      let best = null, bd = Infinity;
+      for (const s of orderState.slots){
+        if (s.filled) continue;
+        const d = distanceToRect(player.x, player.y, s.x, s.y, s.w, s.h);
+        if (d < bd){ bd = d; best = s; }
+      }
+      if (best && bd <= REACH_D) hoveredOrderSlot = best;
+      canvas.style.cursor = hoveredOrderSlot ? 'pointer' : 'default';
+      return;
+    } else {
+      let best = null, bd = Infinity;
+      for (const s of orderState.slots){
+        if (!s.filled) continue;
+        if (s.placedNumber === s.number) continue;
+        const d = distanceToRect(player.x, player.y, s.x, s.y, s.w, s.h);
+        if (d > PLAYER_R + PICKUP_D + 60) continue;
+        if (d < bd){ bd = d; best = s; }
+      }
+      if (best){ hoveredFilledSlot = best; canvas.style.cursor = 'pointer'; return; }
+      const ndx = player.x - (orderState.noteX+20);
+      const ndy = player.y - (orderState.noteY+25);
+      if (!orderState.notePicked && ndx*ndx+ndy*ndy < (PLAYER_R+60)*(PLAYER_R+60)){ hoveredNote = true; canvas.style.cursor = 'pointer'; return; }
+      let bp = null; bd = Infinity;
+      for (const p of orderState.paintings){
+        const d = distanceToRect(player.x, player.y, p.x, p.y, p.w, p.h);
+        if (d > PLAYER_R + PICKUP_D) continue;
+        if (d < bd){ bd = d; bp = p; }
+      }
+      hoveredPainting = bp;
+      canvas.style.cursor = hoveredPainting ? 'pointer' : 'default';
+      return;
+    }
+  }
+  if ((!puzzleState.active || puzzleState.solved) && (!orderState.active || orderState.solved)){
+    const cw = { x:mouse.x - VW/2 + camera.x, y:mouse.y - VH/2 + camera.y };
+    for (const room of rooms){
+      if (room.alpha < 0.5) continue;
+      for (const p of room.posters){
+        let px = p.state === 'idle' ? p.x : (p.state === 'dropped' ? p.dropX : player.x - p.w/2);
+        let py = p.state === 'idle' ? p.y : (p.state === 'dropped' ? p.dropY : player.y - p.h/2);
+        if (cw.x >= px-20 && cw.x <= px+p.w+20 && cw.y >= py-20 && cw.y <= py+p.h+20){
+          const dx = player.x - (px+p.w/2), dy = player.y - (py+p.h/2);
+          const maxDist = p.state === 'carried' ? 9999 : PICKUP_D;
+          if (dx*dx+dy*dy <= maxDist*maxDist){ hoveredPoster = p; break; }
+        }
+      }
+      if (hoveredPoster) break;
+    }
+  }
+  canvas.style.cursor = (hoveredPoster || hoveredPiece || hoveredSlot || hoveredPainting || hoveredOrderSlot || hoveredFilledSlot || hoveredNote) ? 'pointer' : 'default';
+}
+
+/* ══════════════ СКОЛЬЖЕНИЕ ══════════════ */
+function circleHits(mx, my, r, room, includePosters){
+  for (const w of room.walls){
+    const nx = clamp(mx, w.x, w.x+w.w), ny = clamp(my, w.y, w.y+w.h);
+    const dx = mx-nx, dy = my-ny;
+    if (dx*dx+dy*dy < r*r) return true;
+  }
+  if (includePosters){
+    for (const p of room.posters){
+      if (p.state === 'carried') continue;
+      const px = p.state === 'idle' ? p.colX : p.dropX;
+      const py = p.state === 'idle' ? p.colY : p.dropY;
+      const pw = p.state === 'idle' ? p.colW : p.w;
+      const ph = p.state === 'idle' ? p.colH : p.h;
+      const nx = clamp(mx, px, px+pw), ny = clamp(my, py, py+ph);
+      const dx = mx-nx, dy = my-ny;
+      if (dx*dx+dy*dy < r*r) return true;
+    }
+  }
+  return false;
+}
+function slideToward(m, tx, ty, speed, dt, room, includePosters){
+  const dx = tx-m.x, dy = ty-m.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 1) return true;
+  const step = Math.min(speed*dt, dist);
+  const sx = (dx/dist)*step, sy = (dy/dist)*step;
+  if (!circleHits(m.x+sx, m.y, m.r, room, includePosters)) m.x += sx;
+  if (!circleHits(m.x, m.y+sy, m.r, room, includePosters)) m.y += sy;
+  return Math.hypot(tx-m.x, ty-m.y) < 10;
+}
+
+function findNavigationPoint(entity, tx, ty, room){
+  const cell = 55;
+  const cols = Math.max(1, Math.ceil((room.xR - room.xL) / cell));
+  const rows = Math.max(1, Math.ceil((room.yBottom - room.yTop) / cell));
+  const toCell = (x, y) => ({
+    c: clamp(Math.floor((x - room.xL) / cell), 0, cols - 1),
+    r: clamp(Math.floor((y - room.yTop) / cell), 0, rows - 1)
+  });
+  const key = (c, r) => r * cols + c;
+  const center = (c, r) => ({ x: room.xL + (c + 0.5) * cell, y: room.yTop + (r + 0.5) * cell });
+  const start = toCell(entity.x, entity.y), goal = toCell(tx, ty);
+  const blocked = (c, r) => {
+    const p = center(c, r);
+    return circleHits(p.x, p.y, entity.r + 5, room, false);
+  };
+  if (blocked(goal.c, goal.r)){
+    let best = null, bestD = Infinity;
+    for (let r = Math.max(0, goal.r-2); r <= Math.min(rows-1, goal.r+2); r++){
+      for (let c = Math.max(0, goal.c-2); c <= Math.min(cols-1, goal.c+2); c++){
+        if (blocked(c,r)) continue;
+        const d = (c-goal.c)*(c-goal.c) + (r-goal.r)*(r-goal.r);
+        if (d < bestD){ bestD = d; best = {c,r}; }
+      }
+    }
+    if (best) { goal.c = best.c; goal.r = best.r; }
+  }
+  if (blocked(start.c, start.r)) return null;
+  const queue = [{c:start.c, r:start.r}], came = new Map([[key(start.c,start.r), null]]);
+  for (let i=0; i<queue.length; i++){
+    const cur = queue[i];
+    if (cur.c === goal.c && cur.r === goal.r) break;
+    for (const [dc,dr] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const c = cur.c + dc, r = cur.r + dr;
+      if (c < 0 || c >= cols || r < 0 || r >= rows || blocked(c,r)) continue;
+      const k = key(c,r);
+      if (!came.has(k)){ came.set(k, cur); queue.push({c,r}); }
+    }
+  }
+  const goalKey = key(goal.c, goal.r);
+  if (!came.has(goalKey)) return null;
+  const path = [];
+  let step = goal;
+  while (step){ path.push(step); step = came.get(key(step.c,step.r)); }
+  path.reverse();
+  const next = path[Math.min(1, path.length-1)];
+  return next ? center(next.c, next.r) : null;
+}
+
+/* Прямая погоня дополняется коротким BFS-маршрутом через свободные клетки. */
+function smartSlideToward(m, tx, ty, speed, dt, room, includePosters){
+  const dist = Math.hypot(tx-m.x, ty-m.y);
+  if (dist < 1) return true;
+  if (!m.navTimer) m.navTimer = 0;
+  m.navTimer -= dt;
+  const directX = tx-m.x, directY = ty-m.y;
+  const step = Math.min(speed*dt, dist);
+  if (m.navTimer <= 0 || m.navRoom !== room || !m.navPoint || Math.hypot((m.navTargetX||0)-tx, (m.navTargetY||0)-ty) > 90){
+    m.navRoom = room; m.navTargetX = tx; m.navTargetY = ty; m.navTimer = 0.22;
+    m.navPoint = findNavigationPoint(m, tx, ty, room);
+  }
+  let targetX = tx, targetY = ty;
+  if (m.navPoint && circleHits(m.x + directX/dist*step, m.y + directY/dist*step, m.r, room, includePosters)){
+    targetX = m.navPoint.x; targetY = m.navPoint.y;
+  }
+  const dx = targetX-m.x, dy = targetY-m.y, d = Math.hypot(dx,dy) || 1;
+  const sx = dx/d*step, sy = dy/d*step;
+  if (!circleHits(m.x+sx, m.y+sy, m.r, room, includePosters)){ m.x += sx; m.y += sy; }
+  else {
+    const axes = [[step,0],[-step,0],[0,step],[0,-step]];
+    for (const [ax,ay] of axes){
+      if (!circleHits(m.x+ax,m.y+ay,m.r,room,includePosters)){ m.x += ax; m.y += ay; break; }
+    }
+  }
+  if (m.navPoint && Math.hypot(m.x-m.navPoint.x,m.y-m.navPoint.y) < 35) m.navPoint = null;
+  return Math.hypot(tx-m.x, ty-m.y) < 18;
+}
+function pickWaypoint(room, fromX, fromY){
+  const wps = room.waypoints || [];
+  if (wps.length === 0) return { x:0, y:(room.yTop+room.yBottom)/2 };
+  const candidates = [];
+  for (const w of wps){
+    const d = Math.hypot(w.x-fromX, w.y-fromY);
+    if (d > 180) candidates.push(w);
+  }
+  if (candidates.length === 0) return wps[Math.floor(Math.random()*wps.length)];
+  return candidates[Math.floor(Math.random()*candidates.length)];
+}
+
+/* ══════════════ МОНСТР ══════════════ */
+function startMonster(){
+  const room = rooms.find(r => player.y >= r.yTop && player.y <= r.yBottom);
+  if (!room || room.kind !== 'normal') return;
+  if (monster.active) return;
+  monster.active = true;
+  monster.phase = 'warning';
+  monster.warningTimer = MONSTER_WARN_TIME;
+  monster.searchTimer = MONSTER_SEARCH_TIME;
+  monster.attackTimer = 0; monster.leaveTimer = 0;
+  monster.attackPoster = null; monster.room = room;
+  monster.x = 0; monster.y = room.yBottom - 40;
+  monster.targetX = null; monster.targetY = null; monster.targetTimer = 0;
+  monster.pauseAtAlcove = 0; monster.stuckTimer = 0;
+  monster.lastX = monster.x; monster.lastY = monster.y;
+  monsterCooldown = MONSTER_COOLDOWN_ROOMS;
+}
+function killPlayer(reason){ if (dying) return; dying = true; deathTimer = 0; deathReason = reason || 'monster'; }
+
+function updateMonster(dt){
+  if (!monster.active) return;
+
+  /* ── WARNING ── */
+  if (monster.phase === 'warning'){
+    monster.warningTimer -= dt;
+    const p = 1 - monster.warningTimer / MONSTER_WARN_TIME;
+    const shakeAmt = 3 + Math.pow(p, 1.4) * 15;
+    if (shakeIntensity < shakeAmt) shakeIntensity = shakeAmt;
+
+    if (monster.warningTimer <= 0){
+      const curRoom = rooms.find(r => player.y >= r.yTop && player.y <= r.yBottom);
+      if (!curRoom || curRoom.kind !== 'normal'){
+        monster.active = false; monster.phase = 'idle'; return;
+      }
+      monster.room = curRoom;
+      monster.phase = 'searching';
+      monster.searchTimer = MONSTER_SEARCH_TIME;
+      monster.x = 0; monster.y = curRoom.yBottom - 40;
+      monster.targetX = null; monster.targetY = null; monster.targetTimer = 0;
+      monster.pauseAtAlcove = 0; monster.stuckTimer = 0;
+      monster.lastX = monster.x; monster.lastY = monster.y;
+      pushOutOfWalls(monster, curRoom, true);
+      addShake(22);
+    }
+    return;
+  }
+
+  const curRoom = rooms.find(r => player.y >= r.yTop && player.y <= r.yBottom);
+  if (curRoom && curRoom.kind !== 'normal'){ monster.active = false; monster.phase = 'idle'; return; }
+
+  /* ── SEARCHING ──
+     Монстр НЕ идёт к шкафу. Он просто патрулирует.
+     Сломает шкаф ТОЛЬКО если игрок двинулся, находясь в укрытии. */
+  if (monster.phase === 'searching'){
+    monster.searchTimer -= dt;
+
+    const anyMove = keys['w']||keys['ц']||keys['arrowup']||keys['s']||keys['ы']||keys['arrowdown']||
+                    keys['a']||keys['ф']||keys['arrowleft']||keys['d']||keys['в']||keys['arrowright'];
+
+    const inAlcove = getHidingAlcove();
+
+    /* Двинулся в укрытии → атака */
+    if (anyMove && inAlcove){
+      monster.phase = 'attacking';
+      monster.attackTimer = 0;
+      monster.attackPoster = inAlcove;
+      monster.pauseAtAlcove = 0;
+      return;
+    }
+    /* Не спрятан вовсе → через 3 сек атака */
+    if (!inAlcove && monster.searchTimer < MONSTER_SEARCH_TIME - 3){
+      monster.phase = 'attacking';
+      monster.attackTimer = 0;
+      monster.attackPoster = null;
+      monster.pauseAtAlcove = 0;
+      return;
+    }
+
+    /* ── ПАТРУЛИРОВАНИЕ (монстр игнорирует шкаф) ── */
+    monster.pauseAtAlcove = 0;
+    monster.stuckTimer += dt;
+    if (monster.stuckTimer > 0.6){
+      const moved = Math.hypot(monster.x-monster.lastX, monster.y-monster.lastY);
+      if (moved < 8){
+        const wp = pickWaypoint(monster.room, monster.x, monster.y);
+        monster.targetX = wp.x; monster.targetY = wp.y; monster.targetTimer = 4.0;
+        pushOutOfWalls(monster, monster.room, true);
+      }
+      monster.lastX = monster.x; monster.lastY = monster.y;
+      monster.stuckTimer = 0;
+    }
+
+    monster.targetTimer -= dt;
+    if (monster.targetX === null || monster.targetTimer <= 0){
+      const wp = pickWaypoint(monster.room, monster.x, monster.y);
+      monster.targetX = wp.x; monster.targetY = wp.y; monster.targetTimer = 4.5;
+    }
+    const reached = slideToward(monster, monster.targetX, monster.targetY, MONSTER_SPEED, dt, monster.room, true);
+    if (reached){
+      const wp = pickWaypoint(monster.room, monster.x, monster.y);
+      monster.targetX = wp.x; monster.targetY = wp.y; monster.targetTimer = 4.5;
+    }
+    pushOutOfWalls(monster, monster.room, true);
+
+    if (monster.searchTimer <= 0){ monster.phase = 'leaving'; monster.leaveTimer = 1.4; }
+    return;
+  }
+
+  if (monster.phase === 'attacking'){
+    monster.attackTimer += dt;
+    let tx, ty;
+    if (monster.attackPoster){
+      tx = monster.attackPoster.colX + monster.attackPoster.colW/2;
+      ty = monster.attackPoster.colY + monster.attackPoster.colH/2;
+    } else { tx = player.x; ty = player.y; }
+    smartSlideToward(monster, tx, ty, MONSTER_SPEED*1.8, dt, monster.room, false);
+    pushOutOfWalls(monster, monster.room, false);
+    const d = Math.hypot(tx-monster.x, ty-monster.y);
+    if (d < 12 && monster.attackTimer > 0.45){
+      if (monster.attackPoster){
+        monster.attackPoster.state = 'dropped';
+        monster.attackPoster.dropX = monster.attackPoster.x + rnd(-80, 80);
+        monster.attackPoster.dropY = monster.attackPoster.y + rnd(-30, 60);
+      }
+      killPlayer('monster');
+    }
+    return;
+  }
+  if (monster.phase === 'leaving'){
+    monster.leaveTimer -= dt;
+    monster.y += 220*dt;
+    if (monster.leaveTimer <= 0){ monster.active = false; monster.phase = 'idle'; }
+    return;
+  }
+}
+function maybeTriggerMonster(){
+  if (monster.active || dying) return;
+  if (corridorState.active) return;
+  if (burnEvent.active) return;
+  if (puzzleState.active && !puzzleState.solved) return;
+  if (orderState.active && !orderState.solved) return;
+  if (ticketState.active && !ticketState.bought) return;
+  if (passedRoom === lastSeenRoomForMonster) return;
+  lastSeenRoomForMonster = passedRoom;
+  if (monsterCooldown > 0){ monsterCooldown--; return; }
+  if (passedRoom < 4) return;
+  const curRoom = rooms.find(r => player.y >= r.yTop && player.y <= r.yBottom);
+  if (!curRoom || curRoom.kind !== 'normal') return;
+  const chance = Math.min(0.9, MONSTER_CHANCE * floorMult());
+  if (Math.random() < chance) startMonster();
+}
+
+/* ══════════════ ПОЛЕ ЗРЕНИЯ ПРЕСЛЕДОВАТЕЛЯ ══════════════ */
+function rayRectDistance(ox, oy, dx, dy, rect){
+  let near = -Infinity, far = Infinity;
+  for (const [origin, direction, min, max] of [[ox,dx,rect.x,rect.x+rect.w],[oy,dy,rect.y,rect.y+rect.h]]){
+    if (Math.abs(direction) < 1e-8){ if (origin < min || origin > max) return Infinity; continue; }
+    let a = (min-origin)/direction, b = (max-origin)/direction;
+    if (a > b){ const t=a; a=b; b=t; }
+    near = Math.max(near, a); far = Math.min(far, b);
+    if (near > far) return Infinity;
+  }
+  if (far < 0) return Infinity;
+  return Math.max(0, near);
+}
+function getVisionOccluders(room){
+  const occluders = room.walls.slice();
+  for (const box of (room.boxes || [])){
+    if (!box.broken) occluders.push({x:box.x, y:box.y, w:box.w, h:box.h});
+  }
+  for (const poster of (room.posters || [])){
+    if (poster.state === 'carried') continue;
+    const x = poster.state === 'idle' ? poster.colX : poster.dropX;
+    const y = poster.state === 'idle' ? poster.colY : poster.dropY;
+    const w = poster.state === 'idle' ? poster.colW : poster.w;
+    const h = poster.state === 'idle' ? poster.colH : poster.h;
+    occluders.push({x, y, w, h});
+  }
+  for (const garbage of (room.garbage || [])){
+    const size = garbage.size;
+    occluders.push({x:garbage.x-size/2, y:garbage.y-size/2, w:size, h:size});
+  }
+  if (room.pcX !== undefined) occluders.push({x:room.pcX, y:room.pcY, w:room.pcW, h:room.pcH});
+  return occluders;
+}
+function visionDistanceAtAngle(observer, room, angle, maxDistance=3000){
+  const dx = Math.cos(angle), dy = Math.sin(angle);
+  let distance = maxDistance;
+  for (const occluder of getVisionOccluders(room)){
+    const hit = rayRectDistance(observer.x, observer.y, dx, dy, occluder);
+    if (hit > 2 && hit < distance) distance = hit;
+  }
+  return distance;
+}
+function hasLineOfSight(observer, target, room){
+  const dx = target.x - observer.x, dy = target.y - observer.y;
+  const targetDistance = Math.hypot(dx, dy);
+  const targetAngle = Math.atan2(dy, dx);
+  const delta = Math.atan2(Math.sin(targetAngle - observer.angle), Math.cos(targetAngle - observer.angle));
+  if (Math.abs(delta) > CHASER_FOV / 2) return false;
+  return targetDistance < visionDistanceAtAngle(observer, room, targetAngle) - 4;
+}
+
+/* ══════════════ ПРЕСЛЕДОВАТЕЛЬ КОМНАТЫ-ПОРЯДКА ══════════════ */
+function updateChaser(dt){
+  const c = orderState.chaser;
+  if (!c.active || !c.room) return;
+  if (orderState.solved){ c.active = false; return; }
+  if (player.y < c.room.yTop || player.y > c.room.yBottom) return;
+  const distToPlayer = Math.hypot(player.x-c.x, player.y-c.y);
+  const wasVisible = c.visible;
+  c.visible = hasLineOfSight(c, player, c.room);
+  if (!c.visible && wasVisible) c.searchAngle = c.angle;
+  if (c.visible){
+    c.lastSeenX = player.x;
+    c.lastSeenY = player.y;
+    c.searchTimer = 2.8;
+  }
+  c.stuckTimer += dt;
+  if (c.stuckTimer > 0.7){
+    const moved = Math.hypot(c.x-c.lastX, c.y-c.lastY);
+    if (moved < 10){
+      if (c.mode === 'patrol'){
+        const inLeft = c.x < 0;
+        c.targetX = inLeft ? c.room.xR-200 : c.room.xL+200;
+        c.targetY = rnd(c.room.yTop+400, c.room.yBottom-200);
+      }
+      c.targetTimer = 0;
+      pushOutOfWalls(c, c.room, false);
+    }
+    c.lastX = c.x; c.lastY = c.y;
+    c.stuckTimer = 0;
+  }
+  if (c.mode === 'patrol'){
+    c.targetTimer -= dt;
+    if (c.targetTimer <= 0 || Math.hypot(c.targetX-c.x, c.targetY-c.y) < 50){
+      const inLeft = c.x < 0;
+      c.targetX = inLeft ? c.room.xR-200 : c.room.xL+200;
+      c.targetY = rnd(c.room.yTop+350, c.room.yBottom-200);
+      c.targetTimer = 4.5;
+    }
+    const patrolDx = c.targetX - c.x, patrolDy = c.targetY - c.y;
+    if (Math.hypot(patrolDx, patrolDy) > 1) c.angle = Math.atan2(patrolDy, patrolDx);
+    smartSlideToward(c, c.targetX, c.targetY, CHASER_PATROL_SPEED, dt, c.room, false);
+    pushOutOfWalls(c, c.room, false);
+    if (c.visible) c.mode = 'chase';
+  } else if (c.mode === 'chase'){
+    if (c.visible){
+      c.angle = Math.atan2(player.y - c.y, player.x - c.x);
+      const chaseSpeed = Math.min(SPEED * SPRINT_MULT - 20, CHASER_CHASE_SPEED + (currentFloor-1)*15);
+      smartSlideToward(c, player.x, player.y, chaseSpeed, dt, c.room, false);
+    } else {
+      /* Потерял игрока: идем только в последнюю видимую точку. */
+      c.searchTimer -= dt;
+      const searchDx = c.lastSeenX - c.x, searchDy = c.lastSeenY - c.y;
+      const distanceToLastSeen = Math.hypot(searchDx, searchDy);
+      if (distanceToLastSeen > 48){
+        c.angle = Math.atan2(searchDy, searchDx);
+        smartSlideToward(c, c.lastSeenX, c.lastSeenY, CHASER_PATROL_SPEED, dt, c.room, false);
+      } else {
+        /* На месте он оглядывается, но не получает координаты игрока сквозь стену. */
+        c.searchAngle += dt * 2.2;
+        c.angle = c.searchAngle;
+      }
+      if (c.searchTimer <= 0){ c.mode = 'patrol'; c.targetTimer = 0; }
+    }
+    pushOutOfWalls(c, c.room, false);
+    if (c.visible && distToPlayer < PLAYER_R + CHASER_R*0.7) killPlayer('chaser');
+  }
+}
+
+/* ══════════════ ЭФФЕКТЫ ══════════════ */
+function updateEffects(dt){
+  for (let i = effects.length-1; i >= 0; i--){
+    effects[i].t += dt;
+    if (effects[i].t >= effects[i].dur) effects.splice(i, 1);
+  }
+}
+
+/* ══════════════ ВРЕМЯ / ЖАРА ══════════════ */
+function isQuestRoomActive(){
+  const room = rooms.find(r => player.y >= r.yTop && player.y <= r.yBottom);
+  return !!(room && (room.kind === 'puzzle' || room.kind === 'order'));
+}
+function updateGameTime(dt){
+  gameTimeHours += dt / HOUR_REAL_SECONDS;
+  const dayNow = Math.floor(gameTimeHours / 24);
+  const hourNow = gameTimeHours % 24;
+  for (let i = 0; i < BURN_TIMES.length; i++){
+    const t = BURN_TIMES[i];
+    const prevHour = (hourNow - dt / HOUR_REAL_SECONDS + 24) % 24;
+    const crossed = (prevHour < t && hourNow >= t);
+    const key = dayNow * 10 + i;
+    if (crossed && lastBurnSlot !== key && !burnEvent.active){
+      lastBurnSlot = key;
+      if (!isQuestRoomActive()) startBurnEvent();
+    }
+  }
+}
+function updateBurnEvent(dt){
+  if (burnEvent.active && isQuestRoomActive()){
+    endBurnEvent();
+    return;
+  }
+  if (!burnEvent.active){
+    if (burnEvent.vignette > 0) burnEvent.vignette = Math.max(0, burnEvent.vignette - dt * 0.8);
+    return;
+  }
+  burnEvent.timer += dt;
+  const k = clamp(burnEvent.timer / BURN_DURATION, 0, 1);
+  burnEvent.vignette = Math.min(1, k * 1.4 + 0.15);
+  if (burnEvent.timer >= BURN_DURATION){
+    burnEvent.active = false; burnEvent.vignette = 1;
+    killPlayer('burn');
+  }
+}
+function updateKondSound(dt){
+  if (!audioUnlocked) return;
+  const targetVol = burnEvent.active ? 0.6 : 0;
+  const speed = burnEvent.active ? 1.2 : 0.6;
+  if (sounds.kond.volume < targetVol) sounds.kond.volume = Math.min(targetVol, sounds.kond.volume + dt*speed);
+  else sounds.kond.volume = Math.max(targetVol, sounds.kond.volume - dt*speed);
+}
+function updateQuestMusic(dt){
+  if (!audioUnlocked) return;
+  const room = rooms.find(r => player.y >= r.yTop && player.y <= r.yBottom);
+  const puzzleVolume = room && room.kind === 'puzzle' ? 0.35 : 0;
+  const orderVolume = room && room.kind === 'order' ? 0.35 : 0;
+  const targetBg = room && (room.kind === 'puzzle' || room.kind === 'order') ? 0 : 0.20;
+  const step = dt * 0.8;
+  sounds.kvest1.volume += clamp(puzzleVolume - sounds.kvest1.volume, -step, step);
+  sounds.kvest2.volume += clamp(orderVolume - sounds.kvest2.volume, -step, step);
+  sounds.bg.volume += clamp(targetBg - sounds.bg.volume, -step, step);
+}
+
+/* ══════════════ КОРОБКИ ══════════════ */
+function updateBoxes(dt){
+  for (const room of rooms){
+    if (!room.boxes) continue;
+    for (const b of room.boxes){
+      if (b.hitT > 0) b.hitT -= dt;
+      if (b.hitCooldown > 0) b.hitCooldown -= dt;
+      for (let i = b.particles.length-1; i >= 0; i--){
+        const p = b.particles[i];
+        p.t += dt; p.vy += 900*dt;
+        p.x += p.vx*dt; p.y += p.vy*dt;
+        p.rot += p.rotV*dt;
+        if (p.t >= p.life) b.particles.splice(i, 1);
+      }
+    }
+  }
+}
+
+/* ══════════════ ПОТОК КОМНАТ ══════════════ */
+let passedRoom = 1;
+function stream(dt){
+  let guard = 0;
+  while (topY > player.y - 2600 && guard++ < 30) addRoom();
+
+  for (const room of rooms){
+    let protectedRoom = false;
+    if (room.kind === 'puzzle' && !puzzleState.solved) protectedRoom = true;
+    else if (room.kind === 'order' && !orderState.solved) protectedRoom = true;
+    else if (room.kind === 'ticket' && !ticketState.bought) protectedRoom = true;
+    if (corridorState.active && room.kind === 'corridor') protectedRoom = true;
+    if (rooms[0] === room) protectedRoom = true;
+    if (monster.active && monster.room === room) protectedRoom = true;
+
+    if (protectedRoom){ room.dying = false; }
+    else { room.dying = player.y < room.yTop - ROOM_REMOVE_MARGIN; }
+  }
+
+  for (let i = rooms.length-1; i >= 0; i--){
+    const room = rooms[i];
+    if (room.dying){
+      room.alpha -= dt * 0.7;
+      if (room.alpha <= 0){
+        if (burnEvent.lever && burnEvent.lever.room === room && burnEvent.active){
+          burnEvent.lever = spawnLever();
+        }
+        rooms.splice(i, 1);
+      }
+    } else if (room.alpha < 1){
+      room.alpha = Math.min(1, room.alpha + dt * 3);
+    }
+  }
+  for (const room of rooms){
+    if (player.y >= room.yTop && player.y <= room.yBottom){ passedRoom = room.index + 1; break; }
+  }
+}
+
+/* ══════════════ ОБНОВЛЕНИЕ ══════════════ */
+function update(dt){
+  ensureBgMusic();
+
+  if (dying){
+    deathTimer += dt;
+    if (deathTimer > 1.3) location.reload();
+    updateEffects(dt); updateKondSound(dt); updateQuestMusic(dt);
+    if (shakeIntensity > 0) shakeIntensity = Math.max(0, shakeIntensity - dt*SHAKE_DECAY);
+    const k = 1 - Math.exp(-9*dt);
+    camera.x += (player.x-camera.x)*k;
+    camera.y += (player.y-camera.y)*k;
+    return;
+  }
+
+  let mx = 0, my = 0;
+  if (keys['w']||keys['ц']||keys['arrowup'])    my -= 1;
+  if (keys['s']||keys['ы']||keys['arrowdown'])  my += 1;
+  if (keys['a']||keys['ф']||keys['arrowleft'])  mx -= 1;
+  if (keys['d']||keys['в']||keys['arrowright']) mx += 1;
+  if (touchMove.active){ mx = touchMove.x; my = touchMove.y; }
+  const len = Math.hypot(mx, my);
+  if (len > 0){ mx /= len; my /= len; }
+  if (pcOpen){ mx = 0; my = 0; }
+
+  if (len > 0 && !pcOpen){
+    /* Исходный mainchar смотрит вверх, поэтому добавляем 90 градусов. */
+    player.targetAngle = Math.atan2(my, mx) + Math.PI / 2;
+    player.dir = Math.cos(Math.atan2(my, mx)) < 0 ? -1 : 1;
+  }
+  const angleDelta = Math.atan2(Math.sin(player.targetAngle - player.angle), Math.cos(player.targetAngle - player.angle));
+  player.angle += angleDelta * (1 - Math.exp(-12 * dt));
+
+  const sprinting = !!keys['shift'] && len > 0 && !pcOpen;
+  const curSpeed = sprinting ? SPEED * SPRINT_MULT : SPEED;
+  player.x += mx * curSpeed * dt;
+  player.y += my * curSpeed * dt;
+
+  if (len > 0 && !dying && !pcOpen){
+    stepTimer -= dt;
+    if (stepTimer <= 0){ playSound(sounds.step); stepTimer = sprinting ? 0.28 : 0.42; }
+  } else stepTimer = 0;
+
+  resolveCollisions();
+  updateEffects(dt);
+  updateBoxes(dt);
+
+  if (puzzleState.heldPiece){
+    const p = puzzleState.heldPiece;
+    const kf = 1 - Math.exp(-8*dt);
+    p.x += (player.x - p.w/2 - p.x)*kf;
+    p.y += (player.y - p.h/2 - p.y)*kf;
+  }
+  if (orderState.held){
+    const p = orderState.held;
+    const kf = 1 - Math.exp(-8*dt);
+    p.x += (player.x - p.w/2 - p.x)*kf;
+    p.y += (player.y - p.h/2 - p.y)*kf;
+  }
+
+  for (const room of rooms){
+    if (room.kind === 'puzzle' && !puzzleState.active && !puzzleState.solved){
+      if (player.y < room.yBottom - 200 && puzzleState.entranceDoorOpen && !puzzleState.entranceDoorClosing){
+        puzzleState.entranceDoorClosing = true; puzzleState.entranceDoorOpen = false;
+      }
+      if (puzzleState.entranceDoorClosing){
+        puzzleState.entranceDoorAnim += dt * 2.5;
+        if (puzzleState.entranceDoorAnim >= 1){
+          puzzleState.entranceDoorAnim = 1; puzzleState.entranceDoorClosing = false;
+          puzzleState.active = true;
+          playSound(sounds.door);
+        }
+      }
+    }
+    if (room.kind === 'order' && !orderState.active && !orderState.solved){
+      if (player.y < room.yBottom - 200 && orderState.entranceDoorOpen && !orderState.entranceDoorClosing){
+        orderState.entranceDoorClosing = true; orderState.entranceDoorOpen = false;
+      }
+      if (orderState.entranceDoorClosing){
+        orderState.entranceDoorAnim += dt * 2.5;
+        if (orderState.entranceDoorAnim >= 1){
+          orderState.entranceDoorAnim = 1; orderState.entranceDoorClosing = false;
+          orderState.active = true;
+          playSound(sounds.door);
+        }
+      }
+    }
+  }
+
+  if (puzzleState.active && !puzzleState.solved){
+    puzzleState.timeLeft -= dt;
+    if (puzzleState.timeLeft <= 0){ alert("Время вышло!"); location.reload(); }
+  }
+  updateMonster(dt);
+  updateChaser(dt);
+  maybeTriggerMonster();
+  maybeTriggerCorridor();
+  updateCorridorChaser(dt);
+  updateGameTime(dt);
+  updateBurnEvent(dt);
+  updateKondSound(dt);
+  updateQuestMusic(dt);
+
+  const k = 1 - Math.exp(-9*dt);
+  camera.x += (player.x-camera.x)*k;
+  camera.y += (player.y-camera.y)*k;
+
+  stream(dt);
+  updateHover();
+
+  if (monster.active && monster.phase !== 'warning'){
+    if (shakeIntensity > 0) shakeIntensity = Math.max(0, shakeIntensity - dt*SHAKE_DECAY);
+  } else if (!monster.active){
+    if (shakeIntensity > 0) shakeIntensity = Math.max(0, shakeIntensity - dt*SHAKE_DECAY);
+  }
+}
+
+/* ══════════════ ОТРИСОВКА ══════════════ */
+function drawBlockWall(wall, color){
+  const tile = 26;
+  const startX = Math.floor(wall.x / tile) * tile;
+  const startY = Math.floor(wall.y / tile) * tile;
+  for (let y = startY; y < wall.y + wall.h; y += tile){
+    for (let x = startX; x < wall.x + wall.w; x += tile){
+      const x1 = Math.max(x, wall.x), y1 = Math.max(y, wall.y);
+      const x2 = Math.min(x + tile, wall.x + wall.w), y2 = Math.min(y + tile, wall.y + wall.h);
+      if (x2 <= x1 || y2 <= y1) continue;
+      ctx.fillStyle = color;
+      ctx.fillRect(x1, y1, x2-x1, y2-y1);
+      ctx.strokeStyle = 'rgba(0,0,0,0.42)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x1+0.5, y1+0.5, x2-x1-1, y2-y1-1);
+    }
+  }
+}
+function drawRoom(room){
+  const w = room.xR-room.xL, h = room.yBottom-room.yTop;
+  ctx.fillStyle = room.floorColor; ctx.fillRect(room.xL, room.yTop, w, h);
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  const step = 72;
+  for (let x = room.xL+step; x < room.xR; x += step){ ctx.moveTo(x, room.yTop); ctx.lineTo(x, room.yBottom); }
+  for (let y = room.yTop+step; y < room.yBottom; y += step){ ctx.moveTo(room.xL, y); ctx.lineTo(room.xR, y); }
+  ctx.stroke();
+  ctx.fillStyle = room.alcoveFloorColor || room.floorColor;
+  for (const a of room.alcoves) ctx.fillRect(a.x, a.y, a.w, a.h);
+  if (room.garbage && room.garbage.length){
+    for (const g of room.garbage){
+      const tex = g.type === 'musor' ? textures.musor : textures.musor1;
+      if (tex){
+        ctx.save(); ctx.translate(g.x, g.y); ctx.rotate(g.rot);
+        drawSpriteFit(tex, 0, 0, g.size);
+        ctx.restore();
+      }
+    }
+  }
+  for (const wl of room.walls) drawBlockWall(wl, room.wallColor);
+
+  if (room.kind === 'puzzle') drawQuestDoor(room, puzzleState);
+  else if (room.kind === 'order') drawQuestDoor(room, orderState);
+  else if (room.kind === 'ticket') drawTicketDoor(room);
+}
+function drawQuestDoor(room, state){
+  const dx = room.exitDoorX, dy = room.exitDoorY, dw = room.exitDoorW, dh = room.exitDoorH;
+  if (!room.exitDoorOpen){
+    ctx.fillStyle = '#4a3018'; ctx.fillRect(dx-4, dy-4, dw+8, dh+8);
+    ctx.fillStyle = '#6a4520'; ctx.fillRect(dx, dy, dw, dh);
+    ctx.strokeStyle = '#2a1a08'; ctx.lineWidth = 1; ctx.strokeRect(dx+0.5, dy+0.5, dw-1, dh-1);
+    ctx.beginPath();
+    ctx.moveTo(dx+dw/3, dy); ctx.lineTo(dx+dw/3, dy+dh);
+    ctx.moveTo(dx+2*dw/3, dy); ctx.lineTo(dx+2*dw/3, dy+dh);
+    ctx.stroke();
+    ctx.fillStyle = '#ff4444';
+    ctx.beginPath(); ctx.arc(dx+dw-15, dy+dh/2, 4, 0, Math.PI*2); ctx.fill();
+  } else {
+    ctx.fillStyle = '#000'; ctx.fillRect(dx, dy, dw, dh);
+  }
+  const edx = room.entranceDoorX, edy = room.entranceDoorY, edw = room.entranceDoorW, edh = room.entranceDoorH;
+  if (state.entranceDoorClosing){
+    const progress = state.entranceDoorAnim;
+    const ch = edh * progress;
+    ctx.fillStyle = '#6a4520'; ctx.fillRect(edx, edy-ch, edw, ch);
+  } else if (!state.entranceDoorOpen){
+    ctx.fillStyle = '#6a4520'; ctx.fillRect(edx, edy-edh, edw, edh);
+    ctx.strokeStyle = '#2a1a08'; ctx.lineWidth = 1;
+    ctx.strokeRect(edx+0.5, edy-edh+0.5, edw-1, edh-1);
+  }
+}
+function drawTicketDoor(room){
+  const dx = room.exitDoorX, dy = room.exitDoorY, dw = room.exitDoorW, dh = room.exitDoorH;
+  if (!room.exitDoorOpen){
+    ctx.fillStyle = '#5a4220'; ctx.fillRect(dx, dy, dw, dh);
+    ctx.strokeStyle = '#2a1a08'; ctx.lineWidth = 1; ctx.strokeRect(dx+0.5, dy+0.5, dw-1, dh-1);
+    ctx.fillStyle = '#ffcc44'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('🖥', dx+dw/2, dy+dh/2+5);
+  } else {
+    ctx.fillStyle = '#000'; ctx.fillRect(dx, dy, dw, dh);
+  }
+}
+function drawPC(){
+  const r = ticketState.room;
+  if (!r || r.kind !== 'ticket') return;
+  const x = r.pcX, y = r.pcY, w = r.pcW, h = r.pcH;
+  if (textures.pc){
+    drawSpriteFit(textures.pc, x + w/2, y + h/2, Math.max(w, h));
+  } else return;
+  if (hoveredPC && !ticketState.bought){
+    const pulse = 0.6 + 0.4 * Math.sin(performance.now() * 0.008);
+    ctx.strokeStyle = '#555a60';
+    ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+    ctx.strokeRect(x-8, y-8, w+16, h+16); ctx.setLineDash([]);
+    ctx.fillStyle = '#30343a'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('НАЖМИ — ОТКРЫТЬ ТЕРМИНАЛ', x+w/2, y-16);
+  }
+  if (ticketState.bought){
+    ctx.strokeStyle = '#586858'; ctx.lineWidth = 2;
+    ctx.strokeRect(x-2, y-2, w+4, h+4);
+  }
+}
+function drawFragment(imgIndex, part, x, y, w, h){
+  const img = getImageFor(imgIndex);
+  const polyObj = polys[imgIndex];
+  if (!polyObj) return;
+  const poly = part === 'left' ? polyObj.left : polyObj.right;
+  ctx.save();
+  polyPath(poly, x, y, w, h); ctx.clip();
+  if (img){
+    const nw = img.naturalWidth || img.width;
+    const nh = img.naturalHeight || img.height;
+    if (nw > 0 && nh > 0){
+      const scale = Math.min(w / nw, h / nh);
+      const dw = nw * scale, dh = nh * scale;
+      ctx.drawImage(img, x + (w - dw)/2, y + (h - dh)/2, dw, dh);
+    }
+  }
+  ctx.restore();
+  polyPath(poly, x, y, w, h);
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
+}
+function drawSilhouette(imgIndex, part, x, y, w, h, isTarget){
+  const polyObj = polys[imgIndex]; if (!polyObj) return;
+  const poly = part === 'left' ? polyObj.left : polyObj.right;
+  polyPath(poly, x, y, w, h);
+  if (isTarget){
+    const pulse = 0.5 + 0.5*Math.sin(performance.now()*0.008);
+    ctx.fillStyle = `rgba(68,255,136,${0.25+pulse*0.25})`; ctx.fill();
+    ctx.strokeStyle = '#44ff88'; ctx.lineWidth = 3; ctx.stroke();
+  } else {
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fill();
+    ctx.strokeStyle = '#888'; ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
+  }
+}
+function drawPuzzleRoom(room){
+  if (room.kind !== 'puzzle') return;
+  for (const s of puzzleState.slots){
+    if (s.filled) drawFragment(s.imgIndex, s.part, s.x, s.y, s.w, s.h);
+    else drawSilhouette(s.imgIndex, s.part, s.x, s.y, s.w, s.h, hoveredSlot === s);
+  }
+  for (const p of puzzleState.pieces){
+    if (puzzleState.heldPiece === p) continue;
+    drawFragment(p.imgIndex, p.part, p.x, p.y, p.w, p.h);
+    if (hoveredPiece === p){
+      ctx.strokeStyle = '#ffcc33'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+      ctx.strokeRect(p.x-4, p.y-4, p.w+8, p.h+8); ctx.setLineDash([]);
+    }
+  }
+}
+function drawNumberedPainting(imgIndex, x, y, w, h, highlight, targetGlow){
+  if (targetGlow){ ctx.strokeStyle = '#44ff88'; ctx.lineWidth = 3; ctx.strokeRect(x-4, y-4, w+8, h+8); }
+  if (highlight){ ctx.strokeStyle = '#ffcc33'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.strokeRect(x-4, y-4, w+8, h+8); ctx.setLineDash([]); }
+  const img = getImageFor(imgIndex);
+  if (img){
+    const nw = img.naturalWidth || img.width;
+    const nh = img.naturalHeight || img.height;
+    if (nw > 0 && nh > 0){
+      const scale = Math.min(w / nw, h / nh);
+      const dw = nw * scale, dh = nh * scale;
+      ctx.drawImage(img, x + (w - dw)/2, y + (h - dh)/2, dw, dh);
+    }
+  }
+  if (!img) return;
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.strokeRect(x+1, y+1, w-2, h-2);
+  const badge = 22;
+  ctx.fillStyle = '#000'; ctx.fillRect(x+4, y+4, badge, badge);
+  ctx.strokeStyle = '#ffdd88'; ctx.lineWidth = 1; ctx.strokeRect(x+4.5, y+4.5, badge-1, badge-1);
+  ctx.fillStyle = '#ffdd88'; ctx.font = 'bold 13px monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(String(imgIndex+1), x+4+badge/2, y+4+badge/2+1); ctx.textBaseline = 'alphabetic';
+}
+function drawOrderRoom(room){
+  if (room.kind !== 'order') return;
+  for (const s of orderState.slots){
+    if (s.filled){
+      drawNumberedPainting(s.placedNumber, s.x, s.y, s.w, s.h, false, false);
+      ctx.strokeStyle = s.placedNumber === s.number ? '#44ff88' : '#ff4444';
+      ctx.lineWidth = 3; ctx.strokeRect(s.x-2, s.y-2, s.w+4, s.h+4);
+      if (s.placedNumber !== s.number && hoveredFilledSlot === s){
+        ctx.fillStyle = '#ffaaaa'; ctx.font = 'bold 11px monospace';
+        ctx.textAlign = 'center'; ctx.fillText('СНЯТЬ', s.x+s.w/2, s.y-8);
+      }
+    } else {
+      const isTarget = hoveredOrderSlot === s;
+      ctx.fillStyle = isTarget ? 'rgba(68,255,136,0.35)' : 'rgba(0,0,0,0.4)';
+      ctx.fillRect(s.x, s.y, s.w, s.h);
+      ctx.strokeStyle = isTarget ? '#44ff88' : '#888';
+      ctx.lineWidth = isTarget ? 3 : 2;
+      if (!isTarget) ctx.setLineDash([5, 4]);
+      ctx.strokeRect(s.x, s.y, s.w, s.h); ctx.setLineDash([]);
+      ctx.fillStyle = '#ccc'; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('#'+(s.index+1), s.x+s.w/2, s.y+s.h/2+4);
+    }
+  }
+  for (const p of orderState.paintings){
+    if (orderState.held === p) continue;
+    drawNumberedPainting(p.number, p.x, p.y, p.w, p.h, hoveredPainting === p, false);
+  }
+  if (!orderState.notePicked){
+    const nx = orderState.noteX, ny = orderState.noteY;
+    if (hoveredNote){
+      ctx.strokeStyle = '#ffcc33'; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+      ctx.strokeRect(nx-6, ny-6, 52, 62); ctx.setLineDash([]);
+    }
+    ctx.fillStyle = '#f2e8c8'; ctx.fillRect(nx, ny, 40, 50);
+    ctx.strokeStyle = '#8a7a4a'; ctx.lineWidth = 1; ctx.strokeRect(nx+0.5, ny+0.5, 39, 49);
+    ctx.fillStyle = '#3a2a15'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('★', nx+20, ny+20); ctx.fillText('★', nx+20, ny+30); ctx.fillText('★', nx+20, ny+40);
+  }
+}
+function drawHeldPiece(){
+  const p = puzzleState.heldPiece; if (!p) return;
+  drawFragment(p.imgIndex, p.part, p.x, p.y, p.w, p.h);
+  ctx.strokeStyle = hoveredSlot ? '#44ff88' : '#fff';
+  ctx.lineWidth = 2; ctx.setLineDash([3, 3]);
+  ctx.strokeRect(p.x-3, p.y-3, p.w+6, p.h+6); ctx.setLineDash([]);
+}
+function drawHeldPainting(){
+  const p = orderState.held; if (!p) return;
+  drawNumberedPainting(p.number, p.x, p.y, p.w, p.h, false, hoveredOrderSlot !== null);
+}
+function drawLever(){
+  const lv = burnEvent.lever;
+  if (!lv || lv.flipped) return;
+  const x = lv.x, y = lv.y, w = lv.w, h = lv.h;
+  if (textures.lever){
+    drawSpriteFit(textures.lever, x + w/2, y + h/2, Math.max(w, h));
+  } else return;
+  if (hoveredLever){
+    const p2 = 0.6 + 0.4 * Math.sin(performance.now() * 0.008);
+    ctx.strokeStyle = `rgba(255,200,80,${p2})`;
+    ctx.lineWidth = 3; ctx.setLineDash([6, 4]);
+    ctx.strokeRect(x-6, y-6, w+12, h+12); ctx.setLineDash([]);
+    ctx.fillStyle = '#ffee88'; ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center'; ctx.fillText('ПЕРЕКЛЮЧИТЬ', x+w/2, y-14);
+  }
+}
+function drawBox(b){
+  if (b.broken) return;
+  let sx = 0, sy = 0;
+  if (b.hitT > 0){
+    const k = b.hitT / 0.18;
+    sx = (Math.random()*2-1) * 4 * k;
+    sy = (Math.random()*2-1) * 4 * k;
+  }
+  const x = b.x + sx, y = b.y + sy;
+  if (textures.box){
+    drawSpriteFit(textures.box, x + b.w/2, y + b.h/2, Math.max(b.w, b.h));
+  } else return;
+  const dmg = 3 - b.hp;
+  if (dmg >= 1){
+    ctx.strokeStyle = '#0a0500'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + b.w*0.4, y + b.h*0.15);
+    ctx.lineTo(x + b.w*0.55, y + b.h*0.5);
+    ctx.lineTo(x + b.w*0.4, y + b.h*0.85);
+    ctx.stroke();
+  }
+  if (dmg >= 2){
+    ctx.beginPath();
+    ctx.moveTo(x + b.w*0.72, y + b.h*0.2);
+    ctx.lineTo(x + b.w*0.6, y + b.h*0.55);
+    ctx.lineTo(x + b.w*0.75, y + b.h*0.85);
+    ctx.stroke();
+  }
+  if (hoveredBox === b){
+    const pulse = 0.6 + 0.4 * Math.sin(performance.now() * 0.008);
+    ctx.strokeStyle = `rgba(255,220,100,${pulse})`;
+    ctx.lineWidth = 3; ctx.setLineDash([6, 4]);
+    ctx.strokeRect(x-5, y-5, b.w+10, b.h+10); ctx.setLineDash([]);
+    ctx.fillStyle = '#ffee88'; ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center'; ctx.fillText('УДАР (' + b.hp + ')', x+b.w/2, y-8);
+  }
+}
+function drawBoxParticles(b){
+  for (const p of b.particles){
+    const lifeK = 1 - p.t / p.life;
+    ctx.save();
+    ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+    ctx.globalAlpha = Math.max(0, lifeK);
+    if (p.type === 'coin'){
+      if (textures.money) drawSpriteFit(textures.money, 0, 0, 22);
+    } else {
+      ctx.fillStyle = '#8d7659';
+      ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size);
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+function drawBoxes(room){
+  if (!room.boxes) return;
+  for (const b of room.boxes){
+    if (b.broken) drawBoxParticles(b);
+    else drawBox(b);
+  }
+}
+function drawCorridorChaser(){
+  if (!corridorState.active) return;
+  const y = corridorState.chaserY;
+  const curRoom = rooms.find(r => player.y >= r.yTop - 400 && player.y <= r.yBottom + 400);
+  const w = curRoom ? (curRoom.xR - curRoom.xL) + 400 : 1000;
+  const xL = curRoom ? curRoom.xL - 200 : -500;
+
+  const grd = ctx.createLinearGradient(xL, y - 140, xL, y + 60);
+  grd.addColorStop(0, 'rgba(0,0,0,0)');
+  grd.addColorStop(0.55, 'rgba(0,0,0,0.55)');
+  grd.addColorStop(0.85, 'rgba(0,0,0,0.9)');
+  grd.addColorStop(1, 'rgba(0,0,0,1)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(xL, y - 140, w, 260);
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(xL, y, w, 8000);
+
+  ctx.strokeStyle = 'rgba(40,0,0,0.8)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(xL, y);
+  for (let i = 0; i <= 40; i++){
+    const px = xL + (w / 40) * i;
+    const py = y + Math.sin(performance.now() * 0.005 + i * 0.5) * 10;
+    ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+}
+function drawMonster(){
+  if (!monster.active) return;
+  if (monster.phase === 'warning') return;
+  const px = monster.x, py = monster.y;
+  ctx.fillStyle = '#c41010';
+  ctx.beginPath(); ctx.arc(px, py, MONSTER_R, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#ff3838'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = '#3a0808';
+  ctx.beginPath(); ctx.arc(px, py, MONSTER_R*0.55, 0, Math.PI*2); ctx.fill();
+  const eyeAng = performance.now() * 0.004;
+  ctx.fillStyle = '#ffdd44';
+  ctx.beginPath(); ctx.arc(px + Math.cos(eyeAng)*7, py + Math.sin(eyeAng)*7, 5, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#330000';
+  ctx.beginPath(); ctx.arc(px + Math.cos(eyeAng)*7, py + Math.sin(eyeAng)*7, 2, 0, Math.PI*2); ctx.fill();
+}
+function drawChaser(){
+  const c = orderState.chaser;
+  if (!c.active || !c.room) return;
+  if (player.y < c.room.yTop || player.y > c.room.yBottom) return;
+  const isChasing = c.mode === 'chase';
+  /* Отладочная визуализация: бесконечный сектор зрения и темная зона вне него. */
+  const rayCount = 24;
+  const leftAngle = c.angle - CHASER_FOV/2;
+  const rightAngle = c.angle + CHASER_FOV/2;
+  const visionPoints = [];
+  for (let i = 0; i <= rayCount; i++){
+    const angle = leftAngle + (CHASER_FOV * i / rayCount);
+    const distance = visionDistanceAtAngle(c, c.room, angle);
+    visionPoints.push({ x:c.x + Math.cos(angle)*distance, y:c.y + Math.sin(angle)*distance });
+  }
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.14)';
+  ctx.beginPath(); ctx.arc(c.x, c.y, 2200, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = c.visible ? 'rgba(190,190,160,0.12)' : 'rgba(130,130,130,0.08)';
+  ctx.beginPath(); ctx.moveTo(c.x, c.y);
+  for (const point of visionPoints) ctx.lineTo(point.x, point.y);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = c.visible ? 'rgba(220,220,180,0.55)' : 'rgba(150,150,150,0.35)';
+  ctx.lineWidth = 2; ctx.setLineDash([12, 8]);
+  ctx.beginPath(); ctx.moveTo(c.x, c.y);
+  for (const point of visionPoints) ctx.lineTo(point.x, point.y);
+  ctx.stroke(); ctx.setLineDash([]);
+  ctx.restore();
+  ctx.fillStyle = isChasing ? '#9b5f32' : '#80653a';
+  ctx.beginPath(); ctx.arc(c.x, c.y, CHASER_R, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = isChasing ? '#ffcc44' : '#ffaa55'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = '#1a0500';
+  ctx.beginPath(); ctx.arc(c.x, c.y, CHASER_R*0.5, 0, Math.PI*2); ctx.fill();
+  const eyeAng = performance.now() * 0.008;
+  for (let i = 0; i < 3; i++){
+    const a = eyeAng + i*(Math.PI*2/3);
+    const ex = c.x + Math.cos(a)*9;
+    const ey = c.y + Math.sin(a)*9;
+    ctx.fillStyle = isChasing ? '#ff4444' : '#ffaa22';
+    ctx.beginPath(); ctx.arc(ex, ey, 4, 0, Math.PI*2); ctx.fill();
+  }
+}
+function drawLight(px, py){
+  /* Обычное мягкое круговое освещение без фонарика и привязки к курсору. */
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.fillRect(0, 0, VW, VH);
+  const radius = Math.max(420, Math.min(VW, VH) * 0.72);
+  const light = ctx.createRadialGradient(px, py, 30, px, py, radius);
+  light.addColorStop(0, 'rgba(255,255,255,0.10)');
+  light.addColorStop(0.38, 'rgba(255,255,255,0.04)');
+  light.addColorStop(0.72, 'rgba(0,0,0,0.28)');
+  light.addColorStop(1, 'rgba(0,0,0,0.72)');
+  ctx.fillStyle = light;
+  ctx.fillRect(0, 0, VW, VH);
+}
+function drawPlayer(px, py){
+  if (textures.mainchar){
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(player.angle);
+    const size = PLAYER_R * 2.8;
+    drawSpriteFit(textures.mainchar, 0, 0, size);
+    ctx.restore();
+  } else return;
+}
+function drawEffects(){
+  for (const e of effects){
+    const k = e.t / e.dur;
+    if (e.type === 'impact'){
+      const r = e.maxR*k;
+      ctx.strokeStyle = `rgba(255,220,120,${1-k})`;
+      ctx.lineWidth = 4*(1-k)+1;
+      ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI*2); ctx.stroke();
+    }
+  }
+}
+function drawBurnVignette(){
+  const v = burnEvent.vignette;
+  if (v <= 0.01) return;
+  const grd = ctx.createLinearGradient(0, VH, 0, VH * 0.4);
+  grd.addColorStop(0, `rgba(255,0,0,${v*0.8})`);
+  grd.addColorStop(1, 'rgba(255,0,0,0)');
+  ctx.fillStyle = grd; ctx.fillRect(0, 0, VW, VH);
+}
+function drawCorridorVignette(){
+  if (!corridorState.active) return;
+  const distToChaser = player.y - corridorState.chaserY;
+  const danger = clamp(1 - distToChaser / 700, 0, 1);
+  if (danger <= 0.01) return;
+  ctx.fillStyle = `rgba(0,0,0,${0.7 * danger})`;
+  ctx.fillRect(0, VH * 0.5, VW, VH * 0.5);
+}
+function drawBurnHud(){
+  if (!burnEvent.active) return;
+  const t = BURN_DURATION - burnEvent.timer;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 40px ui-monospace, Consolas, monospace';
+  ctx.fillStyle = t <= 8 ? '#ff2222' : '#ffaa55';
+  ctx.fillText(Math.max(0, Math.ceil(t)) + ' с', VW/2, 130);
+  ctx.restore();
+}
+function drawCorridorHud(){
+  if (!corridorState.active) return;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 22px ui-monospace, Consolas, monospace';
+  ctx.fillStyle = '#ff5050';
+  const txt = corridorState.roomsCreated >= CORRIDOR_COUNT
+    ? 'ПОСЛЕДНИЙ КОРИДОР!'
+    : 'КОРИДОРОВ ОСТАЛОСЬ: ' + (CORRIDOR_COUNT - corridorState.roomsCreated + 1);
+  ctx.fillText(txt, VW/2, 128);
+  ctx.restore();
+}
+function drawMonsterWarningBorder(){
+  if (!monster.active || monster.phase !== 'warning') return;
+  const t = performance.now() * 0.008;
+  const alpha = 0.20 + 0.25 * Math.abs(Math.sin(t));
+  ctx.fillStyle = `rgba(255,0,0,${alpha})`;
+  const thick = 10;
+  ctx.fillRect(0, 0, VW, thick);
+  ctx.fillRect(0, VH - thick, VW, thick);
+  ctx.fillRect(0, 0, thick, VH);
+  ctx.fillRect(VW - thick, 0, thick, VH);
+}
+function drawDeathOverlay(){
+  if (!dying) return;
+  const t = Math.min(1, deathTimer/1.3);
+  if (deathReason === 'burn'){
+    ctx.fillStyle = `rgba(180,40,0,${t*0.9})`; ctx.fillRect(0, 0, VW, VH);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, deathTimer*1.5); ctx.textAlign = 'center';
+    ctx.font = 'bold 62px ui-monospace, Consolas, monospace';
+    ctx.fillStyle = '#ff5522';
+    ctx.fillText('СГОРЕЛ ЗАЖИВО', VW/2, VH/2);
+    ctx.restore();
+  } else if (deathReason === 'corridor'){
+    ctx.fillStyle = `rgba(0,0,0,${t*0.95})`; ctx.fillRect(0, 0, VW, VH);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, deathTimer*1.5); ctx.textAlign = 'center';
+    ctx.font = 'bold 60px ui-monospace, Consolas, monospace';
+    ctx.fillStyle = '#888';
+    ctx.fillText('ТЬМА ПОГЛОТИЛА', VW/2, VH/2);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = `rgba(110,0,0,${t*0.85})`; ctx.fillRect(0, 0, VW, VH);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, deathTimer*1.5); ctx.textAlign = 'center';
+    ctx.font = 'bold 64px ui-monospace, Consolas, monospace';
+    ctx.fillStyle = '#ff3030';
+    ctx.fillText('ОНО ТЕБЯ НАШЛО', VW/2, VH/2);
+    ctx.restore();
+  }
+}
+function draw(){
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = '#050507'; ctx.fillRect(0, 0, VW, VH);
+
+  const sx = shakeIntensity > 0 ? (Math.random()*2-1) * shakeIntensity : 0;
+  const sy = shakeIntensity > 0 ? (Math.random()*2-1) * shakeIntensity : 0;
+
+  ctx.save();
+  ctx.translate(VW/2-camera.x + sx, VH/2-camera.y + sy);
+  const vL = camera.x-VW/2-340, vR = camera.x+VW/2+340;
+  const vT = camera.y-VH/2-340, vB = camera.y+VH/2+340;
+  for (const room of rooms){
+    if (room.yTop > vB || room.yBottom < vT || room.xR < vL || room.xL > vR) continue;
+    ctx.globalAlpha = room.alpha; drawRoom(room);
+  }
+  ctx.globalAlpha = 1;
+  drawCorridorChaser();
+  for (const room of rooms){
+    if (room.alpha < 0.5) continue;
+    if (room.yTop > vB || room.yBottom < vT) continue;
+    ctx.globalAlpha = room.alpha;
+    drawBoxes(room);
+  }
+  ctx.globalAlpha = 1;
+  for (const room of rooms){
+    if (room.alpha < 0.5) continue;
+    drawPuzzleRoom(room);
+    drawOrderRoom(room);
+    if (room.kind === 'ticket' && ticketState.room === room) drawPC();
+    for (const p of room.posters){
+      if (p.state !== 'carried'){
+        if (hoveredPoster === p){
+          ctx.strokeStyle = '#ffcc33'; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+          const hx = p.state === 'idle' ? p.x : p.dropX;
+          const hy = p.state === 'idle' ? p.y : p.dropY;
+          ctx.strokeRect(hx-4, hy-4, p.w+8, p.h+8); ctx.setLineDash([]);
+        }
+        const px = p.state === 'idle' ? p.x : p.dropX;
+        const py = p.state === 'idle' ? p.y : p.dropY;
+        ctx.globalAlpha = room.alpha;
+        ctx.fillStyle = '#b8954a'; ctx.fillRect(px, py, p.w, p.h);
+        ctx.strokeStyle = '#3a2a15'; ctx.lineWidth = 2;
+        ctx.strokeRect(px+1, py+1, p.w-2, p.h-2);
+      }
+    }
+  }
+  ctx.globalAlpha = 1;
+  drawMonster();
+  drawChaser();
+  drawPlayer(player.x, player.y);
+  for (const room of rooms){
+    for (const p of room.posters){
+      if (p.state === 'carried'){
+        const px = player.x-p.w/2, py = player.y-p.h/2;
+        ctx.fillStyle = '#c9a55a'; ctx.fillRect(px, py, p.w, p.h);
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(px, py, p.w, p.h);
+      }
+    }
+  }
+  drawHeldPiece();
+  drawHeldPainting();
+  drawLever();
+  drawEffects();
+  ctx.restore();
+
+  const px = player.x-camera.x+VW/2;
+  const py = player.y-camera.y+VH/2;
+  drawLight(px, py);
+  drawBurnVignette();
+  drawCorridorVignette();
+  drawMonsterWarningBorder();
+  drawBurnHud();
+  drawCorridorHud();
+  drawDeathOverlay();
+}
+
+/* ══════════════ HUD ══════════════ */
+const hRoom = document.getElementById('hRoom');
+const hAlive = document.getElementById('hAlive');
+const hTimer = document.getElementById('hTimer');
+const clockEl = document.getElementById('clock');
+const coinEl = document.getElementById('coinCount');
+const floorBadge = document.getElementById('floorBadge');
+const burnHudEl = document.getElementById('burnHud');
+const chaseHudEl = document.getElementById('chaseHud');
+const ticketInfoEl = document.getElementById('ticketInfo');
+const noteEl = document.getElementById('note');
+const noteBody = document.getElementById('noteBody');
+let lastRoom = -1, lastAlive = -1, lastCoin = -1, lastFloor = -1;
+
+function fmtTime(t){ const tt = Math.max(0, Math.ceil(t)); return Math.floor(tt/60) + ':' + String(tt%60).padStart(2,'0'); }
+function fmtClock(h){
+  const hh = Math.floor(h % 24);
+  const mm = Math.floor((h % 1) * 60);
+  return String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+}
+function updateHud(){
+  if (passedRoom !== lastRoom){ hRoom.textContent = passedRoom; lastRoom = passedRoom; }
+  if (rooms.length !== lastAlive){ hAlive.textContent = rooms.length; lastAlive = rooms.length; }
+  if (coinCount !== lastCoin){ coinEl.textContent = coinCount; lastCoin = coinCount; if (pcOpen) renderPC(); }
+  if (currentFloor !== lastFloor){ floorBadge.textContent = 'ЭТАЖ ' + currentFloor; lastFloor = currentFloor; }
+  clockEl.textContent = fmtClock(gameTimeHours);
+  burnHudEl.style.display = burnEvent.active ? 'block' : 'none';
+
+  if (corridorState.active && corridorState.bannerTimer < 3){
+    chaseHudEl.style.display = 'block';
+    const a = 1 - Math.max(0, (corridorState.bannerTimer - 2) / 1);
+    chaseHudEl.style.opacity = a;
+  } else chaseHudEl.style.display = 'none';
+
+  if (ticketState.active && !ticketState.bought){
+    const d = distanceToRect(player.x, player.y, ticketState.pcX, ticketState.pcY, ticketState.pcW, ticketState.pcH);
+    if (d < PLAYER_R + PC_INTERACT_D + 80){
+      ticketInfoEl.style.display = 'block';
+      ticketInfoEl.textContent = 'ПОДОЙДИ И НАЖМИ НА ПК';
+      ticketInfoEl.style.color = '#80c0ff';
+    } else ticketInfoEl.style.display = 'none';
+  } else ticketInfoEl.style.display = 'none';
+
+  if (puzzleState.active && !puzzleState.solved){
+    hTimer.textContent = fmtTime(puzzleState.timeLeft);
+    hTimer.style.color = puzzleState.timeLeft < 15 ? '#ff2222' : '#ff8844';
+    hTimer.style.display = 'inline';
+    noteEl.style.display = 'none';
+  } else if (orderState.active && !orderState.solved){
+    hTimer.style.display = 'none';
+    if (orderState.notePicked){
+      noteEl.style.display = 'block';
+      let html = '';
+      for (let i = 0; i < orderState.sequence.length; i++){
+        html += `<div class="row">Позиция ${i+1} <span>→ ${orderState.sequence[i]+1}</span></div>`;
+      }
+      noteBody.innerHTML = html;
+    } else noteEl.style.display = 'none';
+  } else {
+    hTimer.style.display = 'none';
+    noteEl.style.display = 'none';
+  }
+}
+
+/* ══════════════ ГЛАВНЫЙ ЦИКЛ ══════════════ */
+let last = performance.now();
+function loop(now){
+  const dt = Math.min((now-last)/1000, 0.05);
+  last = now;
+  update(dt); draw(); updateHud();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
